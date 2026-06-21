@@ -7,7 +7,7 @@
 - PWA manifest and service worker.
 - IndexedDB local storage: Working.
 - Manual add, edit and delete.
-- Browse Library as the default screen.
+- Home dashboard with large action cards, recently added books and mobile bottom navigation.
 - Visual book card grid with fallback covers.
 - Book detail view.
 - Personal star rating field, display and 5/4+/3+/unrated filters.
@@ -17,8 +17,8 @@
 - Local cover image upload using data URLs.
 - Cover image URL field.
 - JSON export/import: Working.
-- Google Drive backup: Implemented, requires OAuth Client ID setup and live browser test.
-- Google Drive restore: Implemented, requires OAuth Client ID setup and live browser test.
+- Google Drive backup: Implemented and configured with the browser OAuth Client ID; mocked smoke test passes.
+- Google Drive restore: Implemented and configured with the browser OAuth Client ID; mocked smoke test passes.
 - CSV export.
 - ISBN cleaning and validation.
 - Google Books lookup with review before save.
@@ -33,13 +33,14 @@
 
 - OCR uses free browser-side Tesseract.js from jsDelivr. It has no ongoing cost, but it requires network access to load the library unless self-hosted later, and weak shelf photos may produce poor text. The app never auto-saves OCR guesses.
 - Public book APIs can be incomplete, slow or rate-limited. The app uses Open Library as fallback and keeps manual entry available.
-- Google Drive backup/restore is implemented as a browser-only optional layer, but it cannot be fully verified until Gavin adds a Google OAuth Web Client ID and tests sign-in/save/restore in a live browser.
+- Google Drive backup/restore is implemented as a browser-only optional layer using the configured OAuth Client ID. Headless smoke tests mock the Google Identity and Drive API flow, but Gavin still needs one live OAuth sign-in/save/restore test from the deployed GitHub Pages URL.
 - Data is local to the browser. Jane should export JSON backups before changing devices or clearing browser data.
 
 ## Needs Real-Device Test
 
 - Barcode camera scanning. The scanner UI, fallback path and stream cleanup code are implemented and smoke-tested in headless Chrome, but a real phone/tablet camera cannot be physically tested from this environment. It must be tested on Jane's actual device over HTTPS or localhost.
 - Real shelf photo OCR quality. The upload/progress/review workflow is smoke-tested with a controlled browser OCR result, but real bookshelf photos still need practical testing for lighting, distance and focus.
+- Live Google Drive OAuth from `https://gavinavery-web.github.io/Jane-s-Library/`. The Client ID is wired, but the real account permission popup and Drive file creation must be confirmed in a live browser session.
 
 ## Not Included
 

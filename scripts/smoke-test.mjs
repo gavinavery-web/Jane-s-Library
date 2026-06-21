@@ -59,6 +59,79 @@ try {
       body: JSON.stringify({ numFound: 0, docs: [] })
     });
   });
+  let driveFolderCreated = false;
+  let driveBackupJson = '';
+  await context.route('https://accounts.google.com/gsi/client', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/javascript',
+      body: `
+        window.google = {
+          accounts: {
+            oauth2: {
+              initTokenClient: (config) => ({
+                requestAccessToken: () => setTimeout(() => config.callback({ access_token: 'smoke-token', expires_in: 3600 }), 0)
+              }),
+              revoke: (token, callback) => callback && callback()
+            }
+          }
+        };
+      `
+    });
+  });
+  await context.route('https://www.googleapis.com/upload/drive/v3/files**', async (route) => {
+    const body = route.request().postData() || '';
+    const matches = [...body.matchAll(/Content-Type: application\/json; charset=UTF-8\r?\n\r?\n([\s\S]*?)(?=\r?\n--)/g)];
+    driveBackupJson = matches.map((match) => match[1].trim()).find((part) => part.includes('"books"')) || driveBackupJson;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'backup-file-id', name: 'janes-library-backup.json', modifiedTime: new Date().toISOString() })
+    });
+  });
+  await context.route('https://www.googleapis.com/drive/v3/files**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === 'POST') {
+      driveFolderCreated = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'folder-id', name: "Jane's Library Backups" })
+      });
+      return;
+    }
+    if (url.searchParams.get('alt') === 'media') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: driveBackupJson || JSON.stringify({ books: [], exportedAt: new Date().toISOString(), schemaVersion: 1 })
+      });
+      return;
+    }
+    const query = url.searchParams.get('q') || '';
+    if (query.includes("Jane\\'s Library Backups") || query.includes("Jane's Library Backups")) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ files: driveFolderCreated ? [{ id: 'folder-id', name: "Jane's Library Backups", modifiedTime: new Date().toISOString() }] : [] })
+      });
+      return;
+    }
+    if (query.includes('janes-library-backup.json')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ files: driveBackupJson ? [{ id: 'backup-file-id', name: 'janes-library-backup.json', modifiedTime: new Date().toISOString() }] : [] })
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ files: [] })
+    });
+  });
   const page = await context.newPage();
   page.setDefaultTimeout(8000);
   const errors = [];
@@ -78,16 +151,29 @@ try {
   await page.waitForLoadState('networkidle');
 
   const resetFilters = async () => {
+    await openFilters();
     await page.getByRole('button', { name: /Reset Filters/ }).click();
     await page.waitForTimeout(150);
   };
   const chooseRating = async (rating) => {
     await page.locator(`input[name="rating"][value="${rating}"]`).check({ force: true });
   };
+  const openFilters = async () => {
+    if (!(await page.locator('.filter-drawer[open]').count())) {
+      await page.locator('.filter-drawer summary').click();
+    }
+  };
+  const goHome = async () => page.getByRole('button', { name: 'Home', exact: true }).click();
+  const goBrowse = async () => page.getByRole('button', { name: 'Browse', exact: true }).click();
+  const goAdd = async () => page.getByRole('button', { name: 'Add', exact: true }).click();
+  const goScan = async () => page.getByRole('button', { name: 'Scan', exact: true }).click();
+  const goSettings = async () => page.getByRole('button', { name: 'Settings', exact: true }).click();
 
-  await page.getByRole('button', { name: /^Add Book Manual entry/ }).click();
+  await page.getByRole('button', { name: /Add a Book/ }).first().click();
+  await page.getByRole('button', { name: /Add Manually/ }).click();
   await page.fill('input[name="title"]', 'Safari');
   await page.fill('input[name="authors"]', 'Jane Avery');
+  await page.locator('summary').filter({ hasText: 'More details' }).click();
   await page.fill('input[name="category"]', 'Travel');
   await page.fill('input[name="shelfLocation"]', 'Window Wall / Table');
   await page.fill('textarea[name="summary"]', 'A coffee table book from the sitting room.');
@@ -97,30 +183,35 @@ try {
   const detailAfterAdd = await page.locator('.panel').innerText();
 
   await page.reload({ waitUntil: 'networkidle' });
+  await goBrowse();
   const afterReload = await page.locator('.panel').innerText();
 
+  await openFilters();
   await page.locator('select[name="rating"]').selectOption('5');
   await page.getByRole('button', { name: /Apply Filters/ }).click();
   const fiveStarFiltered = await page.locator('.panel').innerText();
   await resetFilters();
 
   await page.getByRole('button', { name: /Safari/ }).click();
-  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.getByRole('button', { name: /Edit Book/ }).click();
   await page.fill('textarea[name="notes"]', 'Edited note survives refresh.');
   await chooseRating(3);
   await page.getByRole('button', { name: /Save Changes/ }).click();
   await page.waitForTimeout(500);
   await page.reload({ waitUntil: 'networkidle' });
+  await goBrowse();
   await page.getByRole('button', { name: /Safari/ }).click();
   const editedDetail = await page.locator('.panel').innerText();
 
-  await page.getByRole('button', { name: 'Back', exact: true }).click();
-  await page.fill('input[name="query"]', 'edited note');
-  await page.getByRole('button', { name: /Apply Filters/ }).click();
+  await page.getByRole('button', { name: /Back to Browse/ }).click();
+  await page.getByLabel(/Search Jane/).fill('edited note');
+  await page.getByRole('button', { name: /Search/ }).click();
   const filtered = await page.locator('.panel').innerText();
   await resetFilters();
 
-  await page.fill('input[name="query"]', 'edited note');
+  await page.getByLabel(/Search Jane/).fill('edited note');
+  await page.getByRole('button', { name: /Search/ }).click();
+  await openFilters();
   await page.locator('select[name="category"]').selectOption('Travel');
   await page.locator('select[name="shelf"]').selectOption('Window Wall / Table');
   await page.locator('select[name="status"]').selectOption('Available');
@@ -129,20 +220,21 @@ try {
   const combinedRatingFiltered = await page.locator('.panel').innerText();
   await resetFilters();
 
-  await page.getByRole('button', { name: /^Add Book Manual entry/ }).click();
+  await goAdd();
   await page.getByRole('button', { name: /Scan Barcode/ }).click();
   await page.getByRole('button', { name: /Open Camera/ }).click();
   await page.waitForTimeout(1000);
   const scannerText = await page.locator('body').innerText();
 
   if (!(await page.locator('input[name="isbn"]').count())) {
-    await page.getByRole('button', { name: /^Add Book Manual entry/ }).click();
-    await page.getByRole('button', { name: /Find by ISBN/ }).click();
+    await goAdd();
+    await page.getByRole('button', { name: /Enter ISBN/ }).click();
   }
   await page.fill('input[name="isbn"]', '9781761069819');
   await page.getByRole('button', { name: 'Find Book' }).click();
-  await page.waitForSelector('input[name="title"]', { timeout: 14000 });
-  const isbnTitle = await page.locator('input[name="title"]').inputValue();
+  const isbnTitleInput = page.locator('input[name="title"]').first();
+  await isbnTitleInput.waitFor({ state: 'visible', timeout: 14000 });
+  const isbnTitle = await isbnTitleInput.inputValue();
   await chooseRating(4);
   await page.getByRole('button', { name: /Save to Jane/ }).click();
   await page.waitForFunction(() => {
@@ -151,9 +243,10 @@ try {
   });
   const isbnDetailAfterSave = await page.locator('.panel').innerText();
   await page.reload({ waitUntil: 'networkidle' });
+  await goBrowse();
   const afterIsbnReload = await page.locator('.panel').innerText();
 
-  await page.getByRole('button', { name: /Shelf Scan/ }).click();
+  await goScan();
   await page.evaluate(() => {
     window.Tesseract = {
       recognize: async (file, language, options) => {
@@ -189,31 +282,43 @@ try {
   await page.waitForTimeout(500);
   const ocrSavedDetail = await page.locator('.panel').innerText();
 
-  await page.getByRole('button', { name: /Browse Library/ }).click();
+  await goBrowse();
+  await openFilters();
   await page.locator('select[name="rating"]').selectOption('4up');
   await page.getByRole('button', { name: /Apply Filters/ }).click();
   const fourUpFiltered = await page.locator('.panel').innerText();
   await resetFilters();
 
+  await openFilters();
   await page.locator('select[name="rating"]').selectOption('3up');
   await page.getByRole('button', { name: /Apply Filters/ }).click();
   const threeUpFiltered = await page.locator('.panel').innerText();
   await resetFilters();
 
+  await openFilters();
   await page.locator('select[name="rating"]').selectOption('unrated');
   await page.getByRole('button', { name: /Apply Filters/ }).click();
   const unratedFiltered = await page.locator('.panel').innerText();
   await resetFilters();
 
   const backupPath = path.join(os.tmpdir(), `janes-library-smoke-${Date.now()}.json`);
-  await page.getByRole('button', { name: /Backup \/ Settings/ }).click();
+  await goSettings();
   const backupScreenWithDrive = await page.locator('.panel').innerText();
   await page.getByRole('button', { name: /Connect Google Drive/ }).click();
-  await page.waitForTimeout(200);
-  const missingDriveConfigText = await page.locator('body').innerText();
+  await page.waitForFunction(() => document.body.innerText.includes('Google Drive connected'));
+  const driveConnectedText = await page.locator('body').innerText();
+  await page.getByRole('button', { name: 'Save Backup', exact: true }).click();
+  await page.waitForFunction(() => document.body.innerText.includes('Google Drive backup saved'));
+  const driveSavedText = await page.locator('body').innerText();
+  await page.getByRole('button', { name: 'Restore Backup', exact: true }).click();
+  await page.waitForFunction(() => document.body.innerText.includes('Review Google Drive restore'));
+  const driveRestorePreviewText = await page.locator('.panel').innerText();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: /Disconnect Google Drive/ }).click();
+  const driveDisconnectedText = await page.locator('body').innerText();
   const download = await Promise.all([
     page.waitForEvent('download', { timeout: 10000 }),
-    page.getByRole('button', { name: /Export JSON Backup/ }).click()
+    page.getByRole('button', { name: /Download emergency backup/ }).click()
   ]).then(([item]) => item);
   await download.saveAs(backupPath);
   const exportedBackup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
@@ -221,21 +326,23 @@ try {
     && exportedBackup.books?.some((book) => book.title === 'Flawed Hero' && book.rating === 4)
     && exportedBackup.books?.some((book) => book.title === 'OCR Unrated Candidate' && book.rating === 0);
 
-  await page.getByRole('button', { name: /Browse Library/ }).click();
+  await goBrowse();
   await page.getByRole('button', { name: /Safari/ }).click();
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Delete' }).click();
+  await page.getByRole('button', { name: /Delete Book/ }).click();
   await page.waitForTimeout(400);
   await page.reload({ waitUntil: 'networkidle' });
+  await goBrowse();
   const afterDelete = await page.locator('.panel').innerText();
 
-  await page.getByRole('button', { name: /Backup \/ Settings/ }).click();
+  await goSettings();
   await page.setInputFiles('input[name="backup"]', backupPath);
   await page.locator('select[name="mode"]').selectOption('replace');
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: /Import JSON Backup/ }).click();
+  await page.getByRole('button', { name: /Restore from emergency backup/ }).click();
   await page.waitForTimeout(600);
   await page.reload({ waitUntil: 'networkidle' });
+  await goBrowse();
   const afterImport = await page.locator('.panel').innerText();
 
   const result = {
@@ -252,7 +359,10 @@ try {
     filterUnratedWorks: unratedFiltered.includes('OCR Unrated Candidate') && unratedFiltered.includes('Not rated'),
     combinedRatingFilterWorks: combinedRatingFiltered.includes('Safari') && combinedRatingFiltered.includes('3 stars'),
     driveDisconnectedUiVisible: backupScreenWithDrive.includes('Google Drive status') && backupScreenWithDrive.includes('Not connected'),
-    driveMissingClientIdGraceful: missingDriveConfigText.includes('Google Drive backup is not set up yet') && missingDriveConfigText.includes('JSON backup still works'),
+    driveConnectMocked: driveConnectedText.includes('Google Drive connected'),
+    driveSaveMocked: driveSavedText.includes('Google Drive backup saved') && driveBackupJson.includes('"rating"'),
+    driveRestorePreviewMocked: driveRestorePreviewText.includes('Review Google Drive restore') && driveRestorePreviewText.includes('Books in Drive backup'),
+    driveDisconnectSafe: driveDisconnectedText.includes('Google Drive disconnected'),
     backupExported: exportHasRatings,
     backupImported: afterImport.includes('Safari') && afterImport.includes('3 stars') && afterImport.includes('Flawed Hero') && afterImport.includes('4 stars'),
     scannerFallbackVisible: /type the ISBN|camera|Camera|scanner/i.test(scannerText),

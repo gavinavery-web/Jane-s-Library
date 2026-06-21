@@ -18,8 +18,8 @@ Jane's Library is designed to have no ongoing operating cost.
 
 ## External Services
 
-- Google Identity Services: optional browser OAuth for Google Drive backup. No client secret, backend or billing account is used by this app.
-- Google Drive API: optional browser backup/restore using the narrow `drive.file` scope. It creates/updates `janes-library-backup.json` in Jane's Drive and requires Gavin to supply an OAuth Client ID.
+- Google Identity Services: optional browser OAuth for Google Drive backup. The public browser OAuth Client ID is configured; no client secret, backend or billing account is used by this app.
+- Google Drive API: optional browser backup/restore using the narrow `drive.file` scope. It creates/updates `janes-library-backup.json` in Jane's Drive with no paid storage service added by this app.
 - Google Books public API: used for ISBN and text lookup. No API key required.
 - Open Library public API: used as a free fallback/secondary source. No API key required.
 - Open Library cover images: used when returned by the public API.
@@ -33,6 +33,7 @@ Jane's Library is designed to have no ongoing operating cost.
 - If the CDN or network is unavailable, the app shows a fallback path instead of pretending the feature worked.
 - Google Drive backup is optional; JSON export/import remains available if OAuth is not configured, blocked or unavailable.
 - If Google Cloud asks for billing for this personal backup setup, stop and report before continuing.
+- The OAuth Client Secret is deliberately not stored in this browser-only GitHub Pages app.
 - `package.json` has no runtime npm dependencies.
 - No Firebase, Supabase, paid OCR, paid AI vision, cloud functions, paid storage, paid database or paid API dependency is included.
 - No backend, billing account or required API key is included.

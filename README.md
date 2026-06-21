@@ -10,6 +10,10 @@ The production build entry is:
 
 - `dist/index.html`
 
+Live GitHub Pages URL:
+
+- `https://gavinavery-web.github.io/Jane-s-Library/`
+
 `Code.gs` and `Index.html` are obsolete Apps Script prototype files. `Index.html` redirects to the active PWA because OneDrive blocked deleting or renaming that old reparse-point file in this environment.
 
 ## Run Locally
@@ -45,9 +49,9 @@ The static site is written to `dist/`.
 
 ## Local Data and Backups
 
-Books are stored in IndexedDB in the current browser. Jane should use **Backup / Settings > Export JSON Backup** regularly. To move devices or restore data, use **Import Backup** and choose merge or replace.
+Books are saved automatically in this browser. Jane should use **Backup > Download emergency backup** regularly. To move devices or restore data, use **Restore from emergency backup** and choose merge or replace.
 
-Google Drive backup is optional and keeps a safer copy called `janes-library-backup.json` in a Drive folder called `Jane's Library Backups` when OAuth is configured. IndexedDB remains the main working database, and JSON export/import remains available as the emergency fallback.
+Google Drive backup is optional and keeps a safer copy called `janes-library-backup.json` in a Drive folder called `Jane's Library Backups`. Browser storage remains the main working database, and JSON export/import remains available as the emergency fallback.
 
 ## Google Drive Backup Setup
 
@@ -57,15 +61,17 @@ Google Drive backup uses Google Identity Services and the Google Drive API direc
 2. Enable the **Google Drive API**.
 3. Configure the OAuth consent screen for Jane's Library.
 4. Create an OAuth Client ID for a **Web application**.
-5. Add the GitHub Pages app URL as an authorised JavaScript origin.
-6. Add the localhost origin for testing if needed, for example `http://localhost:4173`.
-7. Copy the OAuth Client ID into [src/config/googleDriveConfig.js](</C:/Users/gavin/OneDrive/Documents/Janes Library/src/config/googleDriveConfig.js>).
-8. Run `npm run build` and redeploy the static site.
+5. Add `https://gavinavery-web.github.io` as an authorised JavaScript origin.
+6. If Google asks for a redirect URI, use `https://gavinavery-web.github.io/Jane-s-Library/`.
+7. Add the localhost origin for testing if needed, for example `http://localhost:4173`.
+8. Copy the OAuth Client ID into [src/config/googleDriveConfig.js](</C:/Users/gavin/OneDrive/Documents/Janes Library/src/config/googleDriveConfig.js>).
+9. Run `npm run build` and redeploy the static site.
 
 Use the narrow Drive scope `https://www.googleapis.com/auth/drive.file`, so the app only accesses files it creates or files the user opens with it. If Google asks for billing, stop and report before continuing. No client secret belongs in this static browser app.
 
 ## Features
 
+- Home dashboard with large action cards
 - Browse Library
 - Add Book manually
 - Edit and delete books
@@ -88,7 +94,7 @@ npm run serve
 npm run smoke
 ```
 
-`npm run smoke` opens headless Chrome and checks manual add, personal ratings, persistence, edit, search/filter, backup export/import, Google Drive disconnected fallback, scanner fallback, OCR upload/review path, delete, ISBN lookup and save.
+`npm run smoke` opens headless Chrome and checks manual add, personal ratings, persistence, edit, search/filter, backup export/import, mocked Google Drive connect/save/restore wiring, scanner fallback, OCR upload/review path, delete, ISBN lookup and save.
 
 ## No-Cost Rule
 
@@ -102,6 +108,6 @@ The active app entry in this workspace is `jane-library.html`. The old Apps Scri
 
 - Barcode scanning still needs a real phone/tablet camera test over HTTPS.
 - OCR quality still needs real shelf-photo testing.
-- Google Drive backup/restore needs Gavin to add the OAuth Client ID and run a live browser OAuth test.
+- Google Drive backup/restore is wired with the browser OAuth Client ID, but still needs a live browser OAuth test from the deployed GitHub Pages URL.
 - Browser data is local, so JSON backups matter.
 - Public book APIs can be unavailable or rate-limited; manual entry remains the fallback.

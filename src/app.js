@@ -19,11 +19,11 @@ const DRIVE_SESSION_KEY = 'janes-library-google-drive-session';
 const DRIVE_LAST_BACKUP_KEY = 'janes-library-last-google-drive-backup';
 
 const state = {
-  view: 'browse',
+  view: 'home',
   books: [],
   selectedId: '',
   editingId: '',
-  addMode: 'manual',
+  addMode: 'choices',
   filters: { query: '', category: '', author: '', shelf: '', status: '', rating: '' },
   message: null,
   lookupBook: null,
@@ -71,33 +71,42 @@ function render() {
   const total = state.books.length;
   const borrowed = state.books.filter((book) => book.status === 'Borrowed').length;
   app.innerHTML = `
-    <section class="hero">
-      <div>
-        <span class="eyebrow">Private cottage catalogue</span>
+    <header class="app-header">
+      <div class="brand-block">
+        <span class="eyebrow">Private home library</span>
         <h1>Jane's Library</h1>
-        <p>A calm, no-cost library app for the shelves, armchairs, timber bookcases and family lending notes.</p>
+        <p>A calm place to save, find and back up every book on Jane's shelves.</p>
       </div>
-      <div class="summary-pill" aria-label="${total} books saved">
+      <div class="summary-card" aria-label="${total} books saved">
         <strong>${total}</strong>
-        <span>${total === 1 ? 'book' : 'books'}</span>
+        <span>${total === 1 ? 'book saved' : 'books saved'}</span>
         <small>${borrowed} borrowed</small>
       </div>
-    </section>
-    <nav class="nav" aria-label="Main sections">
-      ${navButton('browse', 'Browse Library', 'Search, filter and open books')}
-      ${navButton('add', 'Add Book', 'Manual entry, ISBN or barcode')}
-      ${navButton('shelf', 'Shelf Scan', 'Photo OCR with review')}
-      ${navButton('backup', 'Backup / Settings', 'Export, import and safety')}
+    </header>
+    <nav class="nav desktop-nav" aria-label="Main sections">
+      ${navButton('home', 'Home', 'Start here')}
+      ${navButton('browse', 'Browse Library', 'Find books')}
+      ${navButton('add', 'Add a Book', 'Scan, ISBN or manual')}
+      ${navButton('shelf', 'Scan Shelves', 'Photo text reader')}
+      ${navButton('backup', 'Backup', 'Keep a safer copy')}
     </nav>
     ${messageHtml()}
     ${driveStartupPromptHtml()}
-    <section class="panel">
+    <main class="panel">
       ${screenHtml()}
-    </section>
+    </main>
+    <nav class="bottom-nav" aria-label="Mobile sections">
+      ${bottomNavButton('home', 'Home', 'H')}
+      ${bottomNavButton('browse', 'Browse', 'B')}
+      ${bottomNavButton('add', 'Add', '+')}
+      ${bottomNavButton('shelf', 'Scan', 'S')}
+      ${bottomNavButton('backup', 'Settings', '*')}
+    </nav>
   `;
 }
 
 function screenHtml() {
+  if (state.view === 'home') return homeHtml();
   if (state.view === 'browse') return browseHtml();
   if (state.view === 'detail') return detailHtml();
   if (state.view === 'add') return addHtml();
@@ -110,11 +119,90 @@ function screenHtml() {
 }
 
 function navButton(view, label, help) {
+  const current = navCurrent(view);
   return `
-    <button type="button" data-view="${view}" aria-current="${state.view === view ? 'page' : 'false'}">
+    <button type="button" data-view="${view}" aria-current="${current ? 'page' : 'false'}">
       ${escapeHtml(label)}
       <span>${escapeHtml(help)}</span>
     </button>
+  `;
+}
+
+function bottomNavButton(view, label, icon) {
+  const current = navCurrent(view);
+  return `
+    <button type="button" data-view="${view}" aria-current="${current ? 'page' : 'false'}">
+      <span aria-hidden="true">${escapeHtml(icon)}</span>
+      ${escapeHtml(label)}
+    </button>
+  `;
+}
+
+function navCurrent(view) {
+  if (state.view === view) return true;
+  if (view === 'browse' && state.view === 'detail') return true;
+  if (view === 'add' && ['edit', 'lookupReview', 'candidateReview'].includes(state.view)) return true;
+  return false;
+}
+
+function homeHtml() {
+  const total = state.books.length;
+  const borrowed = state.books.filter((book) => book.status === 'Borrowed').length;
+  const recent = [...state.books]
+    .sort((a, b) => new Date(b.dateAdded || b.lastUpdated || 0) - new Date(a.dateAdded || a.lastUpdated || 0))
+    .slice(0, 6);
+  return `
+    <section class="home-hero">
+      <div>
+        <span class="eyebrow">Welcome back</span>
+        <h2>What would Jane like to do?</h2>
+        <p>Everything saves on this device automatically. Google Drive and emergency downloads can keep a safer copy.</p>
+      </div>
+      <div class="home-stat">
+        <strong>${borrowed}</strong>
+        <span>${borrowed === 1 ? 'borrowed book' : 'borrowed books'}</span>
+      </div>
+    </section>
+    <section class="action-grid" aria-label="Main actions">
+      ${homeAction('browse', 'Browse Library', 'Search, filter and open saved books.', 'Browse')}
+      ${homeAction('add', 'Add a Book', 'Scan a barcode, enter an ISBN or type details by hand.', 'Add')}
+      ${homeAction('shelf', 'Scan Shelves', 'Upload a shelf photo and review possible matches.', 'Scan')}
+      ${homeAction('backup', 'Backup', 'Save a safer copy or restore from one.', 'Backup')}
+    </section>
+    <section class="recent-section">
+      <div class="section-title">
+        <div>
+          <h2>Recently Added</h2>
+          <p>${total ? 'A quick glance at the newest books in Jane\'s Library.' : 'New books will appear here after Jane adds them.'}</p>
+        </div>
+        ${total ? '<button class="light" type="button" data-view="browse">See All Books</button>' : ''}
+      </div>
+      ${recent.length ? recentBooksHtml(recent) : `<div class="empty">No books yet. Start with Add a Book.</div>`}
+    </section>
+    <p class="home-quote">A home library should feel easy to return to.</p>
+  `;
+}
+
+function homeAction(view, title, text, cta) {
+  return `
+    <button class="action-card" type="button" data-view="${escapeAttr(view)}">
+      <span class="action-kicker">${escapeHtml(cta)}</span>
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(text)}</span>
+    </button>
+  `;
+}
+
+function recentBooksHtml(books) {
+  return `
+    <div class="recent-row">
+      ${books.map((book) => `
+        <button class="recent-book" type="button" data-action="open-book" data-id="${escapeAttr(book.id)}">
+          ${coverHtml(book)}
+          <span>${escapeHtml(book.title || 'Untitled book')}</span>
+        </button>
+      `).join('')}
+    </div>
   `;
 }
 
@@ -138,32 +226,45 @@ function driveStartupPromptHtml() {
 function browseHtml() {
   const options = deriveFilterOptions(state.books);
   const results = filterBooks(state.books, state.filters);
+  const hasFilters = Object.values(state.filters).some(Boolean);
   return `
     <div class="panel-header">
       <div>
         <h2>Browse Library</h2>
-        <p>Find books by title, author, shelf, category, notes or ISBN.</p>
+        <p>Search by title, author, shelf, notes or ISBN.</p>
       </div>
-      <button class="light" type="button" data-view="add">Add Book</button>
+      <button type="button" data-view="add">Add a Book</button>
     </div>
-    <form class="filters" data-form="filters">
-      ${field('query', 'Search words', state.filters.query, 'text', 'Title, author, ISBN or notes')}
-      ${selectField('category', 'Category', state.filters.category, ['', ...options.categories])}
-      ${selectField('author', 'Author', state.filters.author, ['', ...options.authors])}
-      ${selectField('shelf', 'Shelf', state.filters.shelf, ['', ...options.shelves])}
-      ${selectField('status', 'Status', state.filters.status, ['', ...options.statuses])}
-      ${selectField('rating', 'Rating', state.filters.rating, [
-        ['', 'All ratings'],
-        ['5', '5 stars'],
-        ['4up', '4 stars and up'],
-        ['3up', '3 stars and up'],
-        ['unrated', 'Unrated']
-      ])}
-      <div class="toolbar wide">
-        <button type="submit">Apply Filters</button>
-        <button class="light" type="button" data-action="clear-filters">Reset Filters</button>
-      </div>
+    <form class="search-form" data-form="filters">
+      ${field('query', 'Search Jane\'s books', state.filters.query, 'search', 'Title, author, ISBN or notes')}
+      <input type="hidden" name="category" value="${escapeAttr(state.filters.category)}">
+      <input type="hidden" name="author" value="${escapeAttr(state.filters.author)}">
+      <input type="hidden" name="shelf" value="${escapeAttr(state.filters.shelf)}">
+      <input type="hidden" name="status" value="${escapeAttr(state.filters.status)}">
+      <input type="hidden" name="rating" value="${escapeAttr(state.filters.rating)}">
+      <button type="submit">Search</button>
     </form>
+    <details class="filter-drawer" ${hasFilters ? 'open' : ''}>
+      <summary>Filters${hasFilters ? ' active' : ''}</summary>
+      <form class="filters" data-form="filters">
+        <input type="hidden" name="query" value="${escapeAttr(state.filters.query)}">
+        ${selectField('category', 'Category', state.filters.category, ['', ...options.categories])}
+        ${selectField('author', 'Author', state.filters.author, ['', ...options.authors])}
+        ${selectField('shelf', 'Shelf', state.filters.shelf, ['', ...options.shelves])}
+        ${selectField('status', 'Status', state.filters.status, ['', ...options.statuses])}
+        ${selectField('rating', 'Rating', state.filters.rating, [
+          ['', 'All ratings'],
+          ['5', '5 stars'],
+          ['4up', '4 stars and up'],
+          ['3up', '3 stars and up'],
+          ['unrated', 'Unrated']
+        ])}
+        <div class="toolbar wide">
+          <button type="submit">Apply Filters</button>
+          <button class="light" type="button" data-action="clear-filters">Reset Filters</button>
+        </div>
+      </form>
+    </details>
     ${bookListHtml(results, state.books.length ? 'No books match those filters. Try clearing the filters.' : "Jane's library is empty. Add the first book by hand, ISBN or barcode.")}
   `;
 }
@@ -177,14 +278,14 @@ function bookCardHtml(book) {
   return `
     <button class="book-card" type="button" data-action="open-book" data-id="${escapeAttr(book.id)}">
       ${coverHtml(book)}
-      <span>
+      <span class="book-card-body">
+        <span class="badge">${escapeHtml(book.category || 'Uncategorised')}</span>
         <h3>${escapeHtml(book.title || 'Untitled book')}</h3>
-        <p>${escapeHtml(authorLine(book) || 'Author unknown')}</p>
-        <p>${escapeHtml(book.category || 'No category yet')}</p>
-        <p>${escapeHtml(book.shelfLocation || 'No shelf yet')}</p>
+        <p class="book-author">${escapeHtml(authorLine(book) || 'Author unknown')}</p>
         ${ratingDisplayHtml(book.rating)}
-        <p>${escapeHtml(shortText(book.summary || book.notes, 82))}</p>
-        <span class="badge ${book.status === 'Borrowed' ? 'borrowed' : ''}">${escapeHtml(book.status || 'Available')}</span>
+        <p class="book-meta">${escapeHtml(book.shelfLocation || 'No shelf yet')}</p>
+        <span class="status-pill ${book.status === 'Borrowed' ? 'borrowed' : ''}">${escapeHtml(book.status || 'Available')}</span>
+        ${book.summary || book.notes ? `<p class="book-summary">${escapeHtml(shortText(book.summary || book.notes, 88))}</p>` : ''}
       </span>
     </button>
   `;
@@ -200,36 +301,45 @@ function detailHtml() {
   const book = state.books.find((item) => item.id === state.selectedId);
   if (!book) return `<div class="empty">That book is no longer in the library.</div>`;
   return `
-    <div class="panel-header">
-      <div>
+    <button class="linkish back-button" type="button" data-view="browse">Back to Browse</button>
+    <article class="book-detail">
+      <div class="detail-cover">${coverHtml(book)}</div>
+      <div class="detail-main">
+        <span class="badge">${escapeHtml(book.category || 'Uncategorised')}</span>
         <h2>${escapeHtml(book.title)}</h2>
-        <p>${escapeHtml(authorLine(book) || 'Author unknown')}</p>
+        ${book.subtitle ? `<p class="subtitle">${escapeHtml(book.subtitle)}</p>` : ''}
+        <p class="detail-author">${escapeHtml(authorLine(book) || 'Author unknown')}</p>
+        ${ratingDisplayHtml(book.rating)}
+        <dl class="info-card">
+          ${detail('Shelf', book.shelfLocation || 'No shelf yet')}
+          ${detail('Added', formatDate(book.dateAdded) || 'Not recorded')}
+          ${detail('Status', book.status || 'Available')}
+          ${detail('ISBN', [book.isbn13, book.isbn10].filter(Boolean).join(' / ') || 'Not recorded')}
+        </dl>
+        ${(book.summary || book.notes) ? `
+          <section class="notes-card">
+            ${book.summary ? `<h3>Summary</h3><p>${escapeHtml(book.summary)}</p>` : ''}
+            ${book.notes ? `<h3>Jane's notes</h3><p>${escapeHtml(book.notes)}</p>` : ''}
+          </section>
+        ` : ''}
+        <details class="more-details">
+          <summary>More details</summary>
+          <dl class="detail-list">
+            ${detail('Subcategory', book.subcategory)}
+            ${detail('Borrowed by', book.borrowedBy)}
+            ${detail('Borrowed date', book.borrowedDate)}
+            ${detail('Returned date', book.returnedDate)}
+            ${detail('Publisher', book.publisher)}
+            ${detail('Published', book.publishedDate)}
+            ${detail('Source', book.source)}
+          </dl>
+        </details>
+        <div class="detail-actions">
+          <button type="button" data-action="edit-book" data-id="${escapeAttr(book.id)}">Edit Book</button>
+          <button class="danger light-danger" type="button" data-action="delete-book" data-id="${escapeAttr(book.id)}">Delete Book</button>
+        </div>
       </div>
-      <div class="toolbar">
-        <button type="button" data-action="edit-book" data-id="${escapeAttr(book.id)}">Edit</button>
-        <button class="danger" type="button" data-action="delete-book" data-id="${escapeAttr(book.id)}">Delete</button>
-        <button class="light" type="button" data-view="browse">Back</button>
-      </div>
-    </div>
-    <div class="detail-layout">
-      ${coverHtml(book)}
-      <dl class="detail-list">
-        ${detail('Subtitle', book.subtitle)}
-        ${detail('Category', [book.category, book.subcategory].filter(Boolean).join(' / '))}
-        ${detail('Shelf', book.shelfLocation)}
-        ${detail('Status', book.status)}
-        <dt>Jane's rating</dt><dd>${ratingDisplayHtml(book.rating)}</dd>
-        ${detail('Borrowed by', book.borrowedBy)}
-        ${detail('Borrowed date', book.borrowedDate)}
-        ${detail('Returned date', book.returnedDate)}
-        ${detail('ISBN', [book.isbn13, book.isbn10].filter(Boolean).join(' / '))}
-        ${detail('Publisher', book.publisher)}
-        ${detail('Published', book.publishedDate)}
-        ${detail('Source', book.source)}
-        ${detail('Summary', book.summary)}
-        ${detail('Notes', book.notes)}
-      </dl>
-    </div>
+    </article>
   `;
 }
 
@@ -237,28 +347,42 @@ function addHtml() {
   return `
     <div class="panel-header">
       <div>
-        <h2>Add Book</h2>
-        <p>Add a book by hand, look it up by ISBN, or scan a barcode.</p>
+        <h2>Add a Book</h2>
+        <p>Choose the easiest way to add the next book.</p>
       </div>
-      <button class="light" type="button" data-view="browse">Back to Browse</button>
-    </div>
-    <div class="tabs" role="tablist" aria-label="Add book choices">
-      ${tabButton('manual', 'Manual Entry')}
-      ${tabButton('isbn', 'Find by ISBN')}
-      ${tabButton('barcode', 'Scan Barcode')}
+      <button class="light" type="button" data-view="home">Back Home</button>
     </div>
     ${addModeHtml()}
   `;
 }
 
-function tabButton(mode, label) {
-  return `<button type="button" class="${state.addMode === mode ? '' : 'light'}" data-action="add-mode" data-mode="${mode}">${escapeHtml(label)}</button>`;
-}
-
 function addModeHtml() {
+  if (state.addMode === 'choices') return addChoicesHtml();
   if (state.addMode === 'isbn') return isbnLookupHtml();
   if (state.addMode === 'barcode') return barcodeHtml();
   return bookFormHtml(normalizeBook({}), 'create');
+}
+
+function addChoicesHtml() {
+  return `
+    <div class="choice-grid" aria-label="Add book choices">
+      <button class="choice-card" type="button" data-action="add-mode" data-mode="barcode">
+        <span>Scan</span>
+        <strong>Scan Barcode</strong>
+        <small>Use the phone camera to read the ISBN, then review before saving.</small>
+      </button>
+      <button class="choice-card" type="button" data-action="add-mode" data-mode="isbn">
+        <span>ISBN</span>
+        <strong>Enter ISBN</strong>
+        <small>Type the number and look up details from free book catalogues.</small>
+      </button>
+      <button class="choice-card" type="button" data-action="add-mode" data-mode="manual">
+        <span>Manual</span>
+        <strong>Add Manually</strong>
+        <small>Type the important details yourself.</small>
+      </button>
+    </div>
+  `;
 }
 
 function editHtml() {
@@ -278,21 +402,29 @@ function editHtml() {
 
 function isbnLookupHtml() {
   return `
-    <form data-form="isbn" class="form-grid">
+    <div class="mode-header">
+      <button class="linkish" type="button" data-action="add-mode" data-mode="choices">Back to add choices</button>
+      <h3>Enter ISBN</h3>
+      <p>Jane can review the result before anything is saved.</p>
+    </div>
+    <form data-form="isbn" class="isbn-panel">
       ${field('isbn', 'ISBN or barcode number', '', 'text', 'Example: 9781761069819', true)}
-      <div class="actions wide">
+      <div class="actions">
         <button type="submit">Find Book</button>
         <button class="light" type="button" data-action="add-mode" data-mode="manual">Add by Hand Instead</button>
       </div>
     </form>
-    <p class="message">Jane will always review and edit found details before saving.</p>
   `;
 }
 
 function barcodeHtml() {
   return `
+    <div class="mode-header">
+      <button class="linkish" type="button" data-action="add-mode" data-mode="choices">Back to add choices</button>
+      <h3>Scan Barcode</h3>
+      <p>Use this on a phone over HTTPS. If the camera is blocked, type the ISBN instead.</p>
+    </div>
     <div class="scanner-wrap">
-      <p>Use this on a phone or tablet over HTTPS. If the camera is blocked, Jane can type the ISBN instead.</p>
       <video id="barcode-video" playsinline muted aria-label="Barcode camera preview"></video>
       <p class="message scanner-status">Camera is closed. Open it when Jane is ready to scan.</p>
       <div class="actions">
@@ -313,6 +445,7 @@ function reviewLookupHtml() {
       </div>
       <button class="light" type="button" data-view="add">Back</button>
     </div>
+    ${importPreviewHtml(normalizeBook(state.lookupBook || {}))}
     ${bookFormHtml(normalizeBook(state.lookupBook || {}), 'lookup')}
   `;
 }
@@ -326,7 +459,22 @@ function reviewCandidateHtml() {
       </div>
       <button class="light" type="button" data-view="shelf">Back to Shelf Scan</button>
     </div>
+    ${importPreviewHtml(normalizeBook(state.candidateBook || {}))}
     ${bookFormHtml(normalizeBook(state.candidateBook || {}), 'candidate')}
+  `;
+}
+
+function importPreviewHtml(book) {
+  return `
+    <article class="import-preview">
+      ${coverHtml(book)}
+      <div>
+        <span class="badge">${escapeHtml(book.category || book.source || 'Review')}</span>
+        <h3>${escapeHtml(book.title || 'Possible book')}</h3>
+        <p>${escapeHtml(authorLine(book) || 'Author unknown')}</p>
+        ${book.summary ? `<p>${escapeHtml(shortText(book.summary, 220))}</p>` : '<p>No summary was found. Jane can add notes before saving.</p>'}
+      </div>
+    </article>
   `;
 }
 
@@ -334,10 +482,10 @@ function shelfScanHtml() {
   return `
     <div class="panel-header">
       <div>
-        <h2>Shelf Scan</h2>
+        <h2>Scan Shelves</h2>
         <p>Take or upload a shelf photo. Text recognition runs in the browser and nothing is saved until Jane confirms it.</p>
       </div>
-      <button class="light" type="button" data-view="browse">Back to Browse</button>
+      <button class="light" type="button" data-view="home">Back Home</button>
     </div>
     <form data-form="ocr" class="form-grid">
       <label class="wide">Shelf photo
@@ -382,15 +530,15 @@ function backupHtml() {
   return `
     <div class="panel-header">
       <div>
-        <h2>Backup / Settings</h2>
+        <h2>Backup</h2>
         <p>Your library saves on this device automatically. Google Drive backup keeps a safer copy.</p>
       </div>
-      <button class="light" type="button" data-view="browse">Back to Browse</button>
+      <button class="light" type="button" data-view="home">Back Home</button>
     </div>
     <div class="backup-grid">
       <section class="backup-card wide drive-card">
         <h3>Google Drive backup</h3>
-        <p>Optional browser-only backup. IndexedDB remains Jane's working library, and JSON files still work as the emergency fallback.</p>
+        <p>Optional backup to Jane's Google Drive. The library still works on this device without it.</p>
         <dl class="status-list">
           <dt>Google Drive status</dt>
           <dd>${connected ? 'Connected' : 'Not connected'}</dd>
@@ -402,24 +550,24 @@ function backupHtml() {
         ${config.configured ? '' : `<p class="message">${escapeHtml(config.message)}</p>`}
         <div class="actions">
           <button type="button" data-action="drive-connect">Connect Google Drive</button>
-          <button type="button" data-action="drive-save">Save Backup to Google Drive</button>
-          <button type="button" data-action="drive-restore">Restore Backup from Google Drive</button>
+          <button type="button" data-action="drive-save">Save Backup</button>
+          <button type="button" data-action="drive-restore">Restore Backup</button>
           <button class="light" type="button" data-action="drive-disconnect">Disconnect Google Drive</button>
         </div>
         ${driveRestorePreviewHtml()}
       </section>
       <section class="backup-card">
-        <h3>Export JSON backup</h3>
-        <p>Download a full JSON backup that can restore the library later.</p>
-        <button type="button" data-action="export-json">Export JSON Backup</button>
+        <h3>Emergency backup</h3>
+        <p>Download a full backup file. Keep it somewhere safe in case Jane needs it later.</p>
+        <button type="button" data-action="export-json">Download emergency backup</button>
       </section>
       <section class="backup-card">
-        <h3>Export list</h3>
-        <p>Download a spreadsheet-friendly CSV list of books.</p>
-        <button type="button" data-action="export-csv">Export CSV</button>
+        <h3>Book list</h3>
+        <p>Download a simple spreadsheet-friendly list of the books.</p>
+        <button type="button" data-action="export-csv">Download book list</button>
       </section>
       <section class="backup-card">
-        <h3>Import JSON backup</h3>
+        <h3>Restore emergency backup</h3>
         <form data-form="import">
           <label>Backup file
             <input type="file" name="backup" accept="application/json,.json" required>
@@ -430,14 +578,14 @@ function backupHtml() {
               <option value="replace">Replace current library</option>
             </select>
           </label>
-          <button type="submit">Import JSON Backup</button>
+          <button type="submit">Restore from emergency backup</button>
         </form>
       </section>
-      <section class="backup-card">
-        <h3>Testing reset</h3>
-        <p>Clears this browser's local library only. Export a backup first.</p>
-        <button class="danger" type="button" data-action="clear-library">Clear Local Library</button>
-      </section>
+      <details class="backup-card danger-zone">
+        <summary>Advanced / Danger</summary>
+        <p>Clears this browser's local library only. Download a backup first.</p>
+        <button class="danger" type="button" data-action="clear-library">Clear local library</button>
+      </details>
     </div>
   `;
 }
@@ -470,29 +618,44 @@ function driveRestorePreviewHtml() {
 function bookFormHtml(book, mode) {
   return `
     <form data-form="book" data-mode="${escapeAttr(mode)}" data-id="${escapeAttr(book.id || '')}">
-      <div class="form-grid">
+      <input type="hidden" name="coverImageData" value="${escapeAttr(book.coverImageData || '')}">
+      <div class="form-card">
+        ${mode === 'create' ? `
+          <div class="mode-header">
+            <button class="linkish" type="button" data-action="add-mode" data-mode="choices">Back to add choices</button>
+            <h3>Add Manually</h3>
+            <p>Start with the details Jane is most likely to use. More fields are available below.</p>
+          </div>
+        ` : ''}
+        <div class="form-grid essential-fields">
         ${field('title', 'Title', book.title, 'text', '', true)}
-        ${field('subtitle', 'Subtitle', book.subtitle)}
         ${field('authors', 'Author(s)', authorLine(book))}
-        ${field('isbn13', 'ISBN-13', book.isbn13)}
-        ${field('isbn10', 'ISBN-10', book.isbn10)}
-        ${field('publisher', 'Publisher', book.publisher)}
-        ${field('publishedDate', 'Published date', book.publishedDate)}
-        ${field('category', 'Category', book.category)}
-        ${field('subcategory', 'Subcategory', book.subcategory)}
         ${field('shelfLocation', 'Shelf location', book.shelfLocation, 'text', 'Example: Main shelves / Bay 2')}
         ${ratingField(book.rating)}
         ${selectField('status', 'Status', book.status || 'Available', ['Available', 'Borrowed', 'Returned', 'Needs Review'])}
-        ${field('borrowedBy', 'Borrowed by', book.borrowedBy)}
-        ${field('borrowedDate', 'Borrowed date', book.borrowedDate, 'date')}
-        ${field('returnedDate', 'Returned date', book.returnedDate, 'date')}
-        ${field('coverImageUrl', 'Cover image URL', book.coverImageUrl)}
         <label>Local cover photo
           <input type="file" name="coverUpload" accept="image/*">
         </label>
-        ${field('source', 'Source', book.source || (mode === 'create' ? 'Manual' : ''))}
-        ${textareaField('summary', 'Summary', book.summary)}
         ${textareaField('notes', 'Notes', book.notes)}
+        </div>
+        <details class="advanced-fields" ${mode === 'lookup' || mode === 'candidate' || mode === 'edit' ? 'open' : ''}>
+          <summary>More details</summary>
+          <div class="form-grid">
+            ${field('subtitle', 'Subtitle', book.subtitle)}
+            ${field('publisher', 'Publisher', book.publisher)}
+            ${field('publishedDate', 'Published date', book.publishedDate)}
+            ${field('isbn13', 'ISBN-13', book.isbn13)}
+            ${field('isbn10', 'ISBN-10', book.isbn10)}
+            ${field('category', 'Category', book.category)}
+            ${field('subcategory', 'Subcategory', book.subcategory)}
+            ${field('coverImageUrl', 'Cover image URL', book.coverImageUrl)}
+            ${field('source', 'Source', book.source || (mode === 'create' ? 'Manual' : ''))}
+            ${field('borrowedBy', 'Borrowed by', book.borrowedBy)}
+            ${field('borrowedDate', 'Borrowed date', book.borrowedDate, 'date')}
+            ${field('returnedDate', 'Returned date', book.returnedDate, 'date')}
+            ${textareaField('summary', 'Summary / description', book.summary)}
+          </div>
+        </details>
       </div>
       <div class="actions wide" style="margin-top:1rem">
         <button type="submit">${mode === 'edit' ? 'Save Changes' : "Save to Jane's Library"}</button>
@@ -548,6 +711,7 @@ async function handleClick(event) {
 
 function setView(view) {
   if (view !== 'add' || state.addMode !== 'barcode') stopScanner(false);
+  if (view === 'add') state.addMode = 'choices';
   state.view = view;
   clearMessage();
   render();
@@ -650,7 +814,7 @@ async function runIsbnLookup(form) {
 }
 
 async function lookupAndReview(isbn) {
-  setMessage('Looking for that ISBN...', 'good');
+  setMessage('Looking for that ISBN...', 'good loading');
   render();
   state.lookupBook = await lookupBookByIsbn(isbn);
   state.view = 'lookupReview';
@@ -741,7 +905,7 @@ async function runOcr(form) {
     state.ocr.imageUrl = URL.createObjectURL(file);
     state.ocr.progress = 1;
     state.ocr.text = '';
-    setMessage('Reading the shelf photo in this browser...', 'good');
+    setMessage('Reading the shelf photo in this browser...', 'good loading');
     render();
     await loadScriptOnce('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js', 'The free browser text reader could not load.');
     if (!window.Tesseract) throw new Error('The text reader could not load.');
@@ -776,7 +940,7 @@ async function findOcrCandidates() {
       source: 'Shelf photo text',
       notes: 'OCR text candidate. Please review before saving.'
     }));
-    setMessage('Shelf text candidates are ready. Looking for better matches from free book catalogues...', 'good');
+    setMessage('Shelf text candidates are ready. Looking for better matches from free book catalogues...', 'good loading');
     render();
     const found = [];
     for (const query of queries.slice(0, 4)) {
@@ -817,6 +981,8 @@ async function saveBackupToGoogleDrive() {
     const backupTime = new Date();
     const backupJson = createDriveBackupJson(state.books, { now: () => backupTime });
     const client = createGoogleDriveBackupClient({ accessToken: token });
+    setMessage('Saving the Google Drive backup...', 'good loading');
+    render();
     await client.saveBackupJson(backupJson);
     state.drive.lastBackupAt = backupTime.toISOString();
     writeLocalValue(DRIVE_LAST_BACKUP_KEY, state.drive.lastBackupAt);
@@ -833,6 +999,8 @@ async function prepareRestoreFromGoogleDrive() {
   try {
     const token = await ensureGoogleDriveAccess();
     const client = createGoogleDriveBackupClient({ accessToken: token });
+    setMessage('Opening the Google Drive backup...', 'good loading');
+    render();
     state.drive.restorePreview = await client.loadBackup();
     state.drive.newerBackup = null;
     state.view = 'backup';
@@ -1163,6 +1331,16 @@ function writeLocalValue(key, value) {
   try {
     localStorage.setItem(key, value);
   } catch {}
+}
+
+function formatDate(value) {
+  const time = Date.parse(value || '');
+  if (!Number.isFinite(time)) return '';
+  return new Date(time).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
 }
 
 function formatDateTime(value) {

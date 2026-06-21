@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="92" fill="#184839"/>
+  <rect x="86" y="92" width="340" height="328" rx="22" fill="#7a431f"/>
+  <rect x="126" y="128" width="54" height="238" rx="8" fill="#f3e3c2"/>
+  <rect x="190" y="128" width="54" height="238" rx="8" fill="#7a2432"/>
+  <rect x="254" y="128" width="54" height="238" rx="8" fill="#b98c3f"/>
+  <rect x="318" y="128" width="54" height="238" rx="8" fill="#fff7e8"/>
+  <rect x="112" y="382" width="288" height="24" rx="12" fill="#3a2012"/>
+  <text x="256" y="466" fill="#fff7e8" font-family="Georgia, serif" font-size="44" text-anchor="middle">Jane</text>
+</svg>

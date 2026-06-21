@@ -1,0 +1,15 @@
+{
+  "name": "janes-library-pwa",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Jane's Library, a no-backend personal library PWA for static hosting.",
+  "scripts": {
+    "test": "node tests/run-tests.mjs",
+    "build": "node scripts/build-check.mjs",
+    "serve": "node scripts/serve.mjs",
+    "smoke": "node scripts/smoke-test.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

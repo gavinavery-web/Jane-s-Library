@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<!--
+  OBSOLETE PROTOTYPE FILE
+  Jane's Library now runs from jane-library.html during development and
+  dist/index.html after build. This file only redirects away from the old
+  Apps Script prototype.
+-->
+<script>location.replace('jane-library.html');</script>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jane's Library</title>
+  <style>
+    :root {
+      --timber: #23170f;
+      --green: #173b2c;
+      --green-soft: #285541;
+      --parchment: #f5ecd8;
+      --card: #fff8e8;
+      --burgundy: #6c1f2f;
+      --brass: #c6a15b;
+      --ink: #2c2219;
+      --muted: #6f614f;
+      --shadow: rgba(15, 9, 5, 0.24);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: Georgia, "Times New Roman", serif;
+      background:
+        radial-gradient(circle at 20% 8%, rgba(198, 161, 91, 0.22), transparent 28rem),
+        linear-gradient(135deg, #122c22, #29180f 58%, #1f120c);
+    }
+    button, input, select, textarea { font: inherit; }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+      cursor: pointer;
+      background: var(--green);
+      color: #fff8e8;
+      box-shadow: 0 3px 0 rgba(0,0,0,0.18);
+      min-height: 46px;
+    }
+    button:hover { background: var(--green-soft); }
+    button.secondary { background: var(--burgundy); }
+    button.light { background: var(--parchment); color: var(--ink); border: 1px solid rgba(111,97,79,0.35); }
+    button.small { padding: 0.5rem 0.7rem; min-height: 36px; font-size: 0.95rem; }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid rgba(111,97,79,0.35);
+      border-radius: 8px;
+      background: #fffdf5;
+      color: var(--ink);
+      padding: 0.75rem;
+      min-height: 44px;
+    }
+    textarea { min-height: 96px; resize: vertical; }
+    label { display: grid; gap: 0.35rem; font-weight: 700; color: #3b2d20; }
+    .app { max-width: 1180px; margin: 0 auto; padding: 1rem; }
+    .hero {
+      margin: 1rem 0;
+      padding: 1.5rem;
+      color: var(--parchment);
+      border: 1px solid rgba(198,161,91,0.45);
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(35,23,15,0.92), rgba(23,59,44,0.9));
+      box-shadow: 0 18px 40px var(--shadow);
+    }
+    .hero h1 { margin: 0; font-size: clamp(2rem, 5vw, 4rem); letter-spacing: 0; }
+    .hero p { margin: 0.5rem 0 0; color: #eadbbf; font-size: 1.12rem; }
+    .top-actions, .toolbar, .form-actions { display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: center; }
+    .nav-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.8rem; margin: 1rem 0; }
+    .nav-card {
+      text-align: left;
+      min-height: 96px;
+      background: linear-gradient(180deg, var(--card), var(--parchment));
+      color: var(--ink);
+      border: 1px solid rgba(198,161,91,0.55);
+    }
+    .nav-card strong { display: block; font-size: 1.2rem; margin-bottom: 0.3rem; }
+    .nav-card span { color: var(--muted); font-size: 0.95rem; }
+    .panel {
+      background: linear-gradient(180deg, var(--card), var(--parchment));
+      border: 1px solid rgba(198,161,91,0.55);
+      border-radius: 8px;
+      padding: 1rem;
+      box-shadow: 0 14px 30px var(--shadow);
+    }
+    .screen-title { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; margin-bottom: 1rem; }
+    .screen-title h2 { margin: 0; font-size: 1.8rem; }
+    .screen-title p { margin: 0.25rem 0 0; color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0.85rem; }
+    .book-card {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 0.8rem;
+      background: #fffaf0;
+      border: 1px solid rgba(111,97,79,0.25);
+      border-left: 5px solid var(--brass);
+      border-radius: 8px;
+      padding: 0.8rem;
+      cursor: pointer;
+    }
+    .cover {
+      width: 72px;
+      height: 104px;
+      border-radius: 5px;
+      object-fit: cover;
+      background: linear-gradient(135deg, #4d2430, #1f4b38);
+      color: var(--parchment);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      font-size: 0.78rem;
+      padding: 0.4rem;
+      border: 1px solid rgba(198,161,91,0.5);
+    }
+    .book-card h3 { margin: 0 0 0.25rem; font-size: 1.12rem; }
+    .book-card p { margin: 0.2rem 0; color: var(--muted); }
+    .badge {
+      display: inline-block;
+      width: fit-content;
+      margin-top: 0.35rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 999px;
+      border: 1px solid rgba(108,31,47,0.35);
+      color: var(--burgundy);
+      background: #f7eadf;
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+    .badge.borrowed { color: #fff8e8; background: var(--burgundy); }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.85rem; }
+    .wide { grid-column: 1 / -1; }
+    .hidden { display: none !important; }
+    .message { margin: 0.8rem 0; padding: 0.8rem; border-radius: 8px; background: #fff4d5; border: 1px solid rgba(198,161,91,0.45); }
+    .message.good { background: #e8f2e5; }
+    .message.bad { background: #f8e1dc; }
+    .empty { padding: 1.2rem; text-align: center; color: var(--muted); border: 1px dashed rgba(111,97,79,0.45); border-radius: 8px; background: rgba(255,255,255,0.35); }
+    .tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+    .tabs button { background: #eadbbf; color: var(--ink); box-shadow: none; }
+    .tabs button.active { background: var(--burgundy); color: #fff8e8; }
+    .list { display: grid; gap: 0.6rem; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.7rem;
+      align-items: center;
+      padding: 0.7rem;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.4);
+      border: 1px solid rgba(111,97,79,0.18);
+    }
+    .details { display: grid; gap: 0.7rem; }
+    .details dt { font-weight: 700; color: var(--burgundy); }
+    .details dd { margin: 0 0 0.5rem; }
+    .scanner video { width: 100%; max-height: 360px; border-radius: 8px; background: #111; }
+    @media (max-width: 640px) {
+      .app { padding: 0.7rem; }
+      .hero, .panel { padding: 1rem; }
+      .screen-title { display: grid; }
+      .book-card { grid-template-columns: 58px 1fr; }
+      .cover { width: 58px; height: 86px; }
+      .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="hero">
+      <div class="top-actions">
+        <button class="light small" onclick="goHome()">Home</button>
+        <button class="light small" onclick="refreshData()">Refresh</button>
+      </div>
+      <h1>Jane's Library</h1>
+      <p>A quiet catalogue for the cottage shelves.</p>
+    </section>
+
+    <div id="message" class="message hidden"></div>
+    <section id="screen" class="panel"></section>
+  </main>
+
+  <script>
+    var state = {
+      books: [],
+      categories: [],
+      shelves: [],
+      borrowers: [],
+      loans: [],
+      reviewQueue: [],
+      summary: {},
+      screen: 'home',
+      editingBookId: null,
+      scanner: null,
+      scannerStream: null
+    };
+
+    document.addEventListener('DOMContentLoaded', refreshData);
+
+    function refreshData(next) {
+      showMessage('Opening the catalogue...', 'good');
+      callServer('getAppData', [], function (res) {
+        state.books = res.books || [];
+        state.categories = res.categories || [];
+        state.shelves = res.shelves || [];
+        state.borrowers = res.borrowers || [];
+        state.loans = res.loans || [];
+        state.reviewQueue = res.reviewQueue || [];
+        state.summary = res.summary || {};
+        hideMessage();
+        var target = typeof next === 'string' ? next : (typeof state.screen === 'string' ? state.screen : 'home');
+        render(target);
+      });
+    }
+
+    function callServer(name, args, onSuccess) {
+      var runner = google.script.run
+        .withSuccessHandler(function (res) {
+          if (!res || res.ok === false) {
+            showMessage((res && res.message) || 'Something went wrong. Please try again.', 'bad');
+            return;
+          }
+          if (res.message) showMessage(res.message, 'good');
+          if (onSuccess) onSuccess(res);
+        })
+        .withFailureHandler(function () {
+          showMessage('Something went wrong. Please try again.', 'bad');
+        });
+      runner[name].apply(runner, args || []);
+    }
+
+    function render(screen, data) {
+      stopScanner();
+      state.screen = screen;
+      var el = document.getElementById('screen');
+      if (screen === 'home') el.innerHTML = homeHtml();
+      if (screen === 'browse') el.innerHTML = browseHtml(state.books, 'Browse Jane\'s Library');
+      if (screen === 'search') el.innerHTML = searchHtml();
+      if (screen === 'add') el.innerHTML = addHtml();
+      if (screen === 'edit') el.innerHTML = bookFormHtml(data || findBook(state.editingBookId), true);
+      if (screen === 'details') el.innerHTML = detailsHtml(data);
+      if (screen === 'settings') el.innerHTML = settingsHtml('summary');
+      if (screen === 'shelfMap') el.innerHTML = shelfMapHtml();
+      if (screen === 'borrow') el.innerHTML = borrowHtml('checkout');
+      if (screen === 'review') el.innerHTML = reviewQueueHtml();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function homeHtml() {
+      var summary = state.summary || {};
+      return [
+        '<div class="screen-title"><div><h2>Welcome</h2><p>Choose what you would like to do.</p></div></div>',
+        '<div class="nav-grid">',
+        navButton('Browse Jane\'s Library', 'See all saved books', 'browse'),
+        navButton('Search Books', 'Find a title, author or shelf', 'search'),
+        navButton('Add to Library', 'Add a book by hand or ISBN', 'add'),
+        navButton('Borrow / Return', 'Use the lending card', 'borrow'),
+        navButton('Shelf Map', 'See where books live', 'shelfMap'),
+        navButton('Settings / Backup', 'Shelves, categories and exports', 'settings'),
+        '</div>',
+        '<div class="message good">Books: ', esc(summary.totalBooks || 0), ' &nbsp; Borrowed: ', esc(summary.totalBorrowed || 0), summary.lastUpdated ? ' &nbsp; Last updated: ' + esc(summary.lastUpdated) : '', '</div>'
+      ].join('');
+    }
+
+    function navButton(title, text, screen) {
+      return '<button class="nav-card" onclick="render(\'' + screen + '\')"><strong>' + title + '</strong><span>' + text + '</span></button>';
+    }
+
+    function addHtml() {
+      return [
+        headerHtml('Add to Library', 'Choose the easiest way to add a book.'),
+        '<div class="tabs">',
+        '<button class="active" onclick="document.getElementById(\'addArea\').innerHTML=bookFormHtml({},false)">Add by Hand</button>',
+        '<button onclick="showIsbnTool()">Find by ISBN</button>',
+        '<button onclick="showScanner()">Scan Barcode</button>',
+        '<button onclick="showReviewForm()">Review Shelf Photo</button>',
+        '</div>',
+        '<div id="addArea">', bookFormHtml({}, false), '</div>'
+      ].join('');
+    }
+
+    function bookFormHtml(book, editing) {
+      book = book || {};
+      var title = editing ? 'Edit Book' : 'Add Book by Hand';
+      return [
+        '<h3>', title, '</h3>',
+        '<form id="bookForm" onsubmit="saveBook(event, ', editing ? 'true' : 'false', ')">',
+        '<div class="form-grid">',
+        input('Title', 'Title', book.Title, true),
+        input('Author', 'Author', book.Author),
+        selectField('Category', 'Category', book.Category, activeCategories()),
+        input('Subcategory', 'Subcategory', book.Subcategory),
+        input('ISBN', 'ISBN', book.ISBN),
+        input('Publisher', 'Publisher', book.Publisher),
+        input('PublishingYear', 'Publishing Year', book.PublishingYear),
+        input('CoverImageURL', 'Cover image link', book.CoverImageURL),
+        shelfInputs(book),
+        selectField('Status', 'Status', book.Status || 'Available', ['Available', 'Borrowed', 'Needs Review']),
+        textarea('Description', 'Description', book.Description),
+        textarea('Notes', 'Notes', book.Notes),
+        '</div>',
+        '<div class="form-actions" style="margin-top:1rem">',
+        '<button type="submit">Save to Jane\'s Library</button>',
+        editing ? '<button type="button" class="light" onclick="render(\'details\', findBook(state.editingBookId))">Cancel</button>' : '',
+        '</div></form>'
+      ].join('');
+    }
+
+    function shelfInputs(book) {
+      var opts = state.shelves.map(function (s) { return shelfLabel(s); }).filter(Boolean);
+      return [
+        '<label>Shelf choice<select onchange="fillShelfFromChoice(this.value)"><option value="">Type shelf below or choose one</option>',
+        opts.map(function (label) { return '<option value="' + escAttr(label) + '">' + esc(label) + '</option>'; }).join(''),
+        '</select></label>',
+        input('ShelfWall', 'Wall', book.ShelfWall),
+        input('ShelfBay', 'Bay / Bookcase / Cabinet', book.ShelfBay),
+        input('ShelfNumber', 'Shelf number or label', book.ShelfNumber)
+      ].join('');
+    }
+
+    function fillShelfFromChoice(label) {
+      if (!label) return;
+      var shelf = state.shelves.find(function (s) { return shelfLabel(s) === label; });
+      if (!shelf) return;
+      setValue('ShelfWall', shelf.Wall || '');
+      setValue('ShelfBay', shelf.Bay || '');
+      setValue('ShelfNumber', shelf.ShelfNumber || shelf.Label || '');
+    }
+
+    function saveBook(event, editing) {
+      event.preventDefault();
+      var book = formObject('bookForm');
+      if (editing) {
+        callServer('updateBook', [state.editingBookId, book], function () { refreshData('browse'); });
+      } else {
+        callServer('createBook', [book], function () { refreshData('browse'); });
+      }
+    }
+
+    function showIsbnTool(isbn) {
+      document.getElementById('addArea').innerHTML = [
+        '<h3>Find by ISBN</h3>',
+        '<div class="form-grid">',
+        input('isbnLookup', 'Type the ISBN', isbn || ''),
+        '</div><div class="form-actions" style="margin-top:1rem">',
+        '<button onclick="runIsbnLookup()">Find Book</button>',
+        '<button class="light" onclick="document.getElementById(\'addArea\').innerHTML=bookFormHtml({},false)">Add by Hand</button>',
+        '</div><div id="isbnResult"></div>'
+      ].join('');
+    }
+
+    function runIsbnLookup() {
+      var isbn = document.querySelector('[name="isbnLookup"]').value;
+      callServer('lookupIsbn', [isbn], function (res) {
+        var area = document.getElementById('isbnResult');
+        if (!res.found) {
+          area.innerHTML = '<div class="empty">' + esc(res.message) + '</div>';
+          return;
+        }
+        area.innerHTML = '<div class="message good">' + esc(res.message) + '</div>' + bookFormHtml(res.book, false);
+      });
+    }
+
+    function showScanner() {
+      document.getElementById('addArea').innerHTML = [
+        '<div class="scanner"><h3>Scan Barcode</h3>',
+        '<p>Camera scanning works on some phones and browsers. If it does not open, type the ISBN instead.</p>',
+        '<video id="scanVideo" playsinline muted></video>',
+        '<div class="form-actions" style="margin-top:1rem">',
+        '<button onclick="startScanner()">Open Camera</button>',
+        '<button class="light" onclick="showIsbnTool()">Type ISBN Instead</button>',
+        '</div><div id="scanStatus" class="message hidden"></div></div>'
+      ].join('');
+    }
+
+    function startScanner() {
+      var status = document.getElementById('scanStatus');
+      if (!('BarcodeDetector' in window) || !navigator.mediaDevices) {
+        status.className = 'message bad';
+        status.textContent = 'This device cannot scan here. Please type the ISBN instead.';
+        return;
+      }
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function (stream) {
+        state.scannerStream = stream;
+        var video = document.getElementById('scanVideo');
+        video.srcObject = stream;
+        video.play();
+        state.scanner = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] });
+        scanLoop(video);
+      }).catch(function () {
+        status.className = 'message bad';
+        status.textContent = 'The camera did not open. Please type the ISBN instead.';
+      });
+    }
+
+    function scanLoop(video) {
+      if (!state.scanner || !video || state.screen !== 'add') return;
+      state.scanner.detect(video).then(function (codes) {
+        if (codes && codes.length) {
+          var isbn = codes[0].rawValue || '';
+          stopScanner();
+          showIsbnTool(isbn);
+          runLater(runIsbnLookup);
+          return;
+        }
+        runLater(function () { scanLoop(video); }, 350);
+      }).catch(function () {
+        showMessage('Scanning paused. Please type the ISBN instead.', 'bad');
+      });
+    }
+
+    function stopScanner() {
+      if (state.scannerStream) {
+        state.scannerStream.getTracks().forEach(function (track) { track.stop(); });
+      }
+      state.scannerStream = null;
+      state.scanner = null;
+    }
+
+    function browseHtml(books, title) {
+      return [
+        headerHtml(title || 'Books', books.length ? books.length + ' book(s) found.' : 'No books yet.'),
+        books.length ? '<div class="grid">' + books.map(bookCardHtml).join('') + '</div>' : '<div class="empty">No books are on this shelf yet.</div>'
+      ].join('');
+    }
+
+    function bookCardHtml(book) {
+      var borrowed = String(book.Status || '').toLowerCase() === 'borrowed';
+      return [
+        '<article class="book-card" onclick="openDetails(\'', escAttr(book.BookID), '\')">',
+        coverHtml(book),
+        '<div><h3>', esc(book.Title || 'Untitled book'), '</h3>',
+        '<p>', esc(book.Author || 'Author unknown'), '</p>',
+        '<p>', esc(book.Category || 'No category'), '</p>',
+        '<p>', esc(shorten(book.Description || book.Notes || '', 95)), '</p>',
+        '<p>', esc(bookShelf(book) || 'No shelf yet'), '</p>',
+        '<span class="badge ', borrowed ? 'borrowed' : '', '">', esc(book.Status || 'Available'), '</span>',
+        '</div></article>'
+      ].join('');
+    }
+
+    function coverHtml(book) {
+      if (book.CoverImageURL) return '<img class="cover" src="' + escAttr(book.CoverImageURL) + '" alt="">';
+      return '<div class="cover">Jane\'s<br>Library</div>';
+    }
+
+    function searchHtml() {
+      return [
+        headerHtml('Search Books', 'Search by title, author, category, shelf, status, ISBN or notes.'),
+        '<div class="form-grid">',
+        input('q', 'Search words', ''),
+        selectField('cat', 'Category', '', [''].concat(activeCategories())),
+        selectField('status', 'Status', '', ['', 'Available', 'Borrowed', 'Needs Review']),
+        input('shelf', 'Shelf words', ''),
+        '</div><div class="form-actions" style="margin-top:1rem">',
+        '<button onclick="runSearch()">Search</button><button class="light" onclick="render(\'search\')">Clear</button>',
+        '</div><div id="searchResults" style="margin-top:1rem"></div>'
+      ].join('');
+    }
+
+    function runSearch() {
+      var q = value('q').toLowerCase();
+      var cat = value('cat');
+      var status = value('status');
+      var shelf = value('shelf').toLowerCase();
+      var found = state.books.filter(function (book) {
+        var hay = [
+          book.Title, book.Author, book.Category, book.Subcategory, book.ISBN,
+          book.Description, book.Notes, book.ShelfWall, book.ShelfBay, book.ShelfNumber
+        ].join(' ').toLowerCase();
+        var shelfHay = [book.ShelfWall, book.ShelfBay, book.ShelfNumber].join(' ').toLowerCase();
+        return (!q || hay.indexOf(q) !== -1) &&
+          (!cat || book.Category === cat) &&
+          (!status || book.Status === status) &&
+          (!shelf || shelfHay.indexOf(shelf) !== -1);
+      });
+      document.getElementById('searchResults').innerHTML = browseHtml(found, 'Search Results');
+    }
+
+    function openDetails(bookId) {
+      var book = findBook(bookId);
+      render('details', book);
+    }
+
+    function detailsHtml(book) {
+      if (!book) return '<div class="empty">That book could not be found.</div>';
+      var history = state.loans.filter(function (loan) { return loan.BookID === book.BookID; });
+      return [
+        headerHtml(book.Title || 'Book Details', book.Author || ''),
+        '<div class="grid"><div>', coverHtml(book), '</div><dl class="details">',
+        detail('Category', book.Category), detail('Subcategory', book.Subcategory),
+        detail('Shelf', bookShelf(book)), detail('Status', book.Status),
+        detail('ISBN', book.ISBN), detail('Publisher', book.Publisher),
+        detail('Published', book.PublishingYear), detail('Description', book.Description),
+        detail('Notes', book.Notes), '</dl></div>',
+        '<div class="form-actions" style="margin-top:1rem">',
+        '<button onclick="state.editingBookId=\'', escAttr(book.BookID), '\'; render(\'edit\')">Edit Book</button>',
+        '<button class="light" onclick="render(\'borrow\')">Borrow / Return</button>',
+        '</div>',
+        '<h3>Borrowing History</h3>',
+        history.length ? '<div class="list">' + history.map(loanRow).join('') + '</div>' : '<div class="empty">No borrowing history yet.</div>'
+      ].join('');
+    }
+
+    function borrowHtml(tab) {
+      tab = tab || 'checkout';
+      return [
+        headerHtml('Borrow / Return', 'A simple lending card for family loans.'),
+        '<div class="tabs">',
+        tabButton('Check Out a Book', tab === 'checkout', 'document.getElementById(\'borrowArea\').innerHTML=checkoutHtml()'),
+        tabButton('Return a Book', tab === 'return', 'document.getElementById(\'borrowArea\').innerHTML=returnHtml()'),
+        tabButton('Currently Borrowed', tab === 'current', 'document.getElementById(\'borrowArea\').innerHTML=currentBorrowedHtml()'),
+        tabButton('Borrowing History', tab === 'history', 'document.getElementById(\'borrowArea\').innerHTML=historyHtml()'),
+        '</div><div id="borrowArea">', checkoutHtml(), '</div>'
+      ].join('');
+    }
+
+    function checkoutHtml() {
+      var available = state.books.filter(function (b) { return String(b.Status || 'Available').toLowerCase() !== 'borrowed'; });
+      return [
+        '<form id="checkoutForm" onsubmit="saveCheckout(event)"><div class="form-grid">',
+        selectBook('BookID', 'Choose book', available),
+        input('BorrowerName', 'Borrower name', '', true),
+        input('PhoneOptional', 'Phone number (optional)', ''),
+        input('DueDate', 'Due date (optional)', '', false, 'date'),
+        textarea('Notes', 'Notes', ''),
+        '</div><div class="form-actions" style="margin-top:1rem"><button>Check Out Book</button></div></form>'
+      ].join('');
+    }
+
+    function saveCheckout(event) {
+      event.preventDefault();
+      callServer('checkoutBook', [formObject('checkoutForm')], function () { refreshData('borrow'); });
+    }
+
+    function returnHtml() {
+      var current = currentLoans();
+      if (!current.length) return '<div class="empty">No books are currently borrowed.</div>';
+      return '<div class="list">' + current.map(function (loan) {
+        var book = findBook(loan.BookID) || {};
+        return '<div class="row"><div><strong>' + esc(book.Title || loan.BookID) + '</strong><br>Borrowed by ' + esc(loan.BorrowerName || '') + '</div><button onclick="returnLoan(\'' + escAttr(loan.LoanID) + '\')">Return Book</button></div>';
+      }).join('') + '</div>';
+    }
+
+    function returnLoan(loanId) {
+      callServer('returnBook', [loanId], function () { refreshData('borrow'); });
+    }
+
+    function currentBorrowedHtml() {
+      var books = state.books.filter(function (book) { return String(book.Status || '').toLowerCase() === 'borrowed'; });
+      return browseHtml(books, 'Currently Borrowed');
+    }
+
+    function historyHtml() {
+      return state.loans.length ? '<div class="list">' + state.loans.map(loanRow).join('') + '</div>' : '<div class="empty">No lending history yet.</div>';
+    }
+
+    function loanRow(loan) {
+      var book = findBook(loan.BookID) || {};
+      return '<div class="row"><div><strong>' + esc(book.Title || loan.BookID || 'Book') + '</strong><br>' + esc(loan.BorrowerName || '') + ' - ' + esc(loan.Status || '') + '<br>Borrowed: ' + esc(loan.BorrowDate || '') + (loan.ReturnDate ? ' Returned: ' + esc(loan.ReturnDate) : '') + '</div></div>';
+    }
+
+    function settingsHtml(tab) {
+      return [
+        headerHtml('Settings / Backup', 'Manage the catalogue lists and export simple copies.'),
+        '<div class="tabs">',
+        tabButton('Summary', true, 'document.getElementById(\'settingsArea\').innerHTML=summaryHtml()'),
+        tabButton('Categories', false, 'document.getElementById(\'settingsArea\').innerHTML=categoriesHtml()'),
+        tabButton('Shelves', false, 'document.getElementById(\'settingsArea\').innerHTML=shelvesHtml()'),
+        tabButton('Exports', false, 'document.getElementById(\'settingsArea\').innerHTML=exportsHtml()'),
+        tabButton('Review Queue', false, 'render(\'review\')'),
+        '</div><div id="settingsArea">', summaryHtml(), '</div>'
+      ].join('');
+    }
+
+    function summaryHtml() {
+      var s = state.summary || {};
+      return '<div class="message good"><strong>' + esc(s.libraryName || 'Jane\'s Library') + '</strong><br>Total books: ' + esc(s.totalBooks || 0) + '<br>Borrowed books: ' + esc(s.totalBorrowed || 0) + '<br>Loans saved: ' + esc(s.totalLoans || 0) + (s.lastUpdated ? '<br>Last updated: ' + esc(s.lastUpdated) : '') + '</div>';
+    }
+
+    function categoriesHtml() {
+      return [
+        '<h3>Manage Categories</h3>',
+        '<form id="categoryForm" onsubmit="saveCategory(event)"><div class="form-grid">',
+        input('CategoryID', 'Category ID', '', false, 'hidden'),
+        input('CategoryName', 'Category name', '', true),
+        input('ParentCategory', 'Parent category', ''),
+        selectField('Active', 'Show this category', 'TRUE', ['TRUE', 'FALSE']),
+        input('SortOrder', 'Sort order', ''),
+        '</div><div class="form-actions" style="margin-top:1rem"><button>Save Category</button></div></form>',
+        '<div class="list" style="margin-top:1rem">', state.categories.map(categoryRow).join('') || '<div class="empty">No categories yet.</div>', '</div>'
+      ].join('');
+    }
+
+    function categoryRow(cat) {
+      return '<div class="row"><div><strong>' + esc(cat.CategoryName || '') + '</strong><br>' + esc(cat.Active || 'TRUE') + '</div><button class="small light" onclick="editCategory(\'' + escAttr(cat.CategoryID) + '\')">Edit</button></div>';
+    }
+
+    function editCategory(id) {
+      var cat = state.categories.find(function (c) { return c.CategoryID === id; });
+      if (!cat) return;
+      ['CategoryID','CategoryName','ParentCategory','Active','SortOrder'].forEach(function (k) { setValue(k, cat[k] || ''); });
+    }
+
+    function saveCategory(event) {
+      event.preventDefault();
+      var cat = formObject('categoryForm');
+      if (cat.CategoryID) callServer('updateCategory', [cat.CategoryID, cat], function () { refreshData('settings'); });
+      else callServer('addCategory', [cat], function () { refreshData('settings'); });
+    }
+
+    function shelvesHtml() {
+      return [
+        '<h3>Manage Shelves</h3>',
+        '<form id="shelfForm" onsubmit="saveShelf(event)"><div class="form-grid">',
+        input('ShelfID', 'Shelf ID', '', false, 'hidden'),
+        input('Wall', 'Wall', ''), input('Bay', 'Bay / Bookcase / Cabinet', ''),
+        input('ShelfNumber', 'Shelf number', ''), input('Label', 'Shelf label', ''),
+        textarea('Notes', 'Notes', ''),
+        '</div><div class="form-actions" style="margin-top:1rem"><button>Save Shelf</button></div></form>',
+        '<div class="list" style="margin-top:1rem">', state.shelves.map(shelfRow).join('') || '<div class="empty">No shelves yet.</div>', '</div>'
+      ].join('');
+    }
+
+    function shelfRow(shelf) {
+      return '<div class="row"><div><strong>' + esc(shelfLabel(shelf) || 'Shelf') + '</strong><br>' + esc(shelf.Notes || '') + '</div><button class="small light" onclick="editShelf(\'' + escAttr(shelf.ShelfID) + '\')">Edit</button></div>';
+    }
+
+    function editShelf(id) {
+      var shelf = state.shelves.find(function (s) { return s.ShelfID === id; });
+      if (!shelf) return;
+      ['ShelfID','Wall','Bay','ShelfNumber','Label','Notes'].forEach(function (k) { setValue(k, shelf[k] || ''); });
+    }
+
+    function saveShelf(event) {
+      event.preventDefault();
+      var shelf = formObject('shelfForm');
+      if (shelf.ShelfID) callServer('updateShelf', [shelf.ShelfID, shelf], function () { refreshData('settings'); });
+      else callServer('addShelf', [shelf], function () { refreshData('settings'); });
+    }
+
+    function exportsHtml() {
+      return '<div class="nav-grid"><button onclick="downloadExport(\'all\')">Export Book List</button><button onclick="downloadExport(\'borrowed\')">Export Borrowed Books</button><button onclick="downloadExport(\'backup\')">Export Library Backup</button></div>';
+    }
+
+    function downloadExport(kind) {
+      callServer('exportBooksCsv', [kind], function (res) {
+        var blob = new Blob([res.content || ''], { type: 'text/csv' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = res.filename || 'janes-library.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    }
+
+    function shelfMapHtml() {
+      var groups = {};
+      state.shelves.forEach(function (shelf) { groups[shelfLabel(shelf)] = shelf; });
+      state.books.forEach(function (book) {
+        var key = bookShelf(book);
+        if (key && !groups[key]) groups[key] = { Wall: book.ShelfWall, Bay: book.ShelfBay, ShelfNumber: book.ShelfNumber, Label: '' };
+      });
+      var shelves = Object.keys(groups).sort();
+      return [
+        headerHtml('Shelf Map', 'A simple map of Jane\'s own shelf names.'),
+        shelves.length ? '<div class="grid">' + shelves.map(function (label) {
+          var count = state.books.filter(function (book) { return bookShelf(book) === label; }).length;
+          return '<button class="nav-card" onclick="showShelfBooks(\'' + escAttr(label) + '\')"><strong>' + esc(label) + '</strong><span>' + count + ' book(s)</span></button>';
+        }).join('') + '</div>' : '<div class="empty">No shelves are saved yet. Add shelves in Settings.</div>',
+        '<div id="shelfBooks" style="margin-top:1rem"></div>'
+      ].join('');
+    }
+
+    function showShelfBooks(label) {
+      var books = state.books.filter(function (book) { return bookShelf(book) === label; });
+      document.getElementById('shelfBooks').innerHTML = browseHtml(books, label);
+    }
+
+    function showReviewForm() {
+      document.getElementById('addArea').innerHTML = reviewFormHtml();
+    }
+
+    function reviewFormHtml(prefill) {
+      prefill = prefill || {};
+      return [
+        '<h3>Review Shelf Photo</h3>',
+        '<p>Add a photo link or type the words you can see. Nothing is added to the library until Jane reviews it.</p>',
+        '<form id="reviewForm" onsubmit="saveReview(event)"><div class="form-grid">',
+        input('ShelfLocation', 'Shelf location', prefill.ShelfLocation || ''),
+        input('ImageURL', 'Photo link or Drive link', prefill.ImageURL || ''),
+        input('PossibleTitle', 'Possible title', prefill.PossibleTitle || ''),
+        input('PossibleAuthor', 'Possible author', prefill.PossibleAuthor || ''),
+        textarea('DetectedText', 'Words you can see', prefill.DetectedText || ''),
+        textarea('Notes', 'Notes', prefill.Notes || ''),
+        '</div><div class="form-actions" style="margin-top:1rem"><button>Add to Review List</button></div></form>'
+      ].join('');
+    }
+
+    function saveReview(event) {
+      event.preventDefault();
+      callServer('addReviewItem', [formObject('reviewForm')], function () { refreshData('review'); });
+    }
+
+    function reviewQueueHtml() {
+      return [
+        headerHtml('Review Queue', 'A gentle holding place for shelf photo notes.'),
+        state.reviewQueue.length ? '<div class="list">' + state.reviewQueue.map(reviewRow).join('') + '</div>' : '<div class="empty">No review items yet.</div>'
+      ].join('');
+    }
+
+    function reviewRow(item) {
+      return '<div class="row"><div><strong>' + esc(item.PossibleTitle || 'Review item') + '</strong><br>' + esc(item.PossibleAuthor || '') + '<br>' + esc(item.ShelfLocation || '') + '<br><span class="badge">' + esc(item.Status || 'Needs Review') + '</span></div><div class="form-actions"><button class="small" onclick="prefillBookFromReview(\'' + escAttr(item.ReviewID) + '\')">Add Book</button><button class="small light" onclick="setReviewStatus(\'' + escAttr(item.ReviewID) + '\',\'Added Manually\')">Mark Added</button><button class="small secondary" onclick="setReviewStatus(\'' + escAttr(item.ReviewID) + '\',\'Rejected\')">Reject</button></div></div>';
+    }
+
+    function prefillBookFromReview(id) {
+      var item = state.reviewQueue.find(function (r) { return r.ReviewID === id; });
+      render('add');
+      runLater(function () {
+        document.getElementById('addArea').innerHTML = bookFormHtml({ Title: item.PossibleTitle, Author: item.PossibleAuthor, Notes: item.DetectedText, CoverImageURL: item.ImageURL }, false);
+      });
+    }
+
+    function setReviewStatus(id, status) {
+      callServer('updateReviewItemStatus', [id, status], function () { refreshData('review'); });
+    }
+
+    function headerHtml(title, subtitle) {
+      return '<div class="screen-title"><div><h2>' + esc(title) + '</h2><p>' + esc(subtitle || '') + '</p></div><button class="light" onclick="goHome()">Home</button></div>';
+    }
+
+    function input(name, label, val, required, type) {
+      if (type === 'hidden') return '<input type="hidden" name="' + name + '" value="' + escAttr(val || '') + '">';
+      return '<label>' + label + '<input type="' + (type || 'text') + '" name="' + name + '" value="' + escAttr(val || '') + '"' + (required ? ' required' : '') + '></label>';
+    }
+
+    function textarea(name, label, val) {
+      return '<label class="wide">' + label + '<textarea name="' + name + '">' + esc(val || '') + '</textarea></label>';
+    }
+
+    function selectField(name, label, val, options) {
+      return '<label>' + label + '<select name="' + name + '">' + (options || []).map(function (opt) {
+        return '<option value="' + escAttr(opt) + '"' + (String(opt) === String(val || '') ? ' selected' : '') + '>' + esc(opt || 'Any') + '</option>';
+      }).join('') + '</select></label>';
+    }
+
+    function selectBook(name, label, books) {
+      return '<label>' + label + '<select name="' + name + '" required><option value="">Choose a book</option>' + books.map(function (book) {
+        return '<option value="' + escAttr(book.BookID) + '">' + esc(book.Title || 'Untitled') + '</option>';
+      }).join('') + '</select></label>';
+    }
+
+    function tabButton(label, active, action) {
+      return '<button class="' + (active ? 'active' : '') + '" onclick="' + action + '">' + label + '</button>';
+    }
+
+    function detail(label, value) {
+      return value ? '<dt>' + esc(label) + '</dt><dd>' + esc(value) + '</dd>' : '';
+    }
+
+    function formObject(formId) {
+      var form = document.getElementById(formId);
+      var data = {};
+      Array.prototype.forEach.call(new FormData(form).entries(), function (entry) { data[entry[0]] = entry[1]; });
+      return data;
+    }
+
+    function activeCategories() {
+      return state.categories
+        .filter(function (c) { return String(c.Active || 'TRUE').toUpperCase() !== 'FALSE'; })
+        .map(function (c) { return c.CategoryName; })
+        .filter(Boolean);
+    }
+
+    function currentLoans() {
+      return state.loans.filter(function (loan) {
+        return String(loan.Status || '').toLowerCase() === 'borrowed' && !loan.ReturnDate;
+      });
+    }
+
+    function findBook(id) {
+      return state.books.find(function (book) { return book.BookID === id; });
+    }
+
+    function shelfLabel(shelf) {
+      return [shelf.Wall, shelf.Bay, shelf.ShelfNumber || shelf.Label].filter(Boolean).join(' / ');
+    }
+
+    function bookShelf(book) {
+      return [book.ShelfWall, book.ShelfBay, book.ShelfNumber].filter(Boolean).join(' / ');
+    }
+
+    function goHome() { render('home'); }
+    function runLater(fn, delay) { setTimeout(fn, delay || 80); }
+    function value(name) { var el = document.querySelector('[name="' + name + '"]'); return el ? el.value : ''; }
+    function setValue(name, val) { var el = document.querySelector('[name="' + name + '"]'); if (el) el.value = val; }
+    function shorten(text, max) { text = text || ''; return text.length > max ? text.substring(0, max - 1) + '...' : text; }
+    function showMessage(text, type) { var el = document.getElementById('message'); el.textContent = text; el.className = 'message ' + (type || ''); }
+    function hideMessage() { document.getElementById('message').className = 'message hidden'; }
+    function esc(value) {
+      return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, function (ch) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+      });
+    }
+    function escAttr(value) { return esc(value).replace(/`/g, '&#96;'); }
+  </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "Jane's Library",
+  "short_name": "Jane's Library",
+  "description": "A private no-cost home library catalogue for Jane.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3e3c2",
+  "theme_color": "#184839",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

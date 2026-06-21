@@ -58,6 +58,18 @@ test('Open Library data can fill gaps in Google metadata', () => {
   assert.match(merged.source, /Open Library/);
 });
 
+test('Open Library cover can fill a missing Google Books cover', () => {
+  const google = { title: 'Flawed Hero', authors: ['Chris Masters'], source: 'Google Books' };
+  const openLibrary = openLibraryDocToBook({
+    title: 'Flawed Hero',
+    author_name: ['Chris Masters'],
+    isbn: ['9781761069819'],
+    cover_i: 12345
+  });
+  const merged = mergeBookMetadata(google, openLibrary);
+  assert.equal(merged.coverImageUrl, 'https://covers.openlibrary.org/b/id/12345-L.jpg');
+});
+
 test('lookup automatically falls back to Open Library when Google Books rate-limits', async () => {
   const calls = [];
   const book = await lookupBookByIsbn('9781761069819', async (url) => {

@@ -15,7 +15,17 @@ const required = [
   'src/googleDriveBackup.js',
   'src/config/googleDriveConfig.js',
   'src/ocrCandidates.js',
+  'src/categories.js',
+  'assets/icon-192.png',
+  'assets/icon-512.png',
   'assets/icon.svg',
+  'assets/ui/home-library.jpg',
+  'assets/ui/shelves-library-optimized.jpg',
+  'assets/ui/book-spines-optimized.jpg',
+  'assets/ui/settings-library.jpg',
+  'assets/ui/book-open.svg',
+  'assets/ui/reading-lady.svg',
+  'assets/ui/library-donkey.svg',
   'PROJECT_AUDIT.md',
   'COST_GUARDRAILS.md',
   'FEATURE_STATUS.md',
@@ -40,12 +50,18 @@ for (const word of banned) {
 const dist = path.join(root, 'dist');
 fs.mkdirSync(dist, { recursive: true });
 
+const skippedCopies = new Set([
+  normalizeCopyPath('assets/ui/shelves-library.jpg'),
+  normalizeCopyPath('assets/ui/book-spines.jpg')
+]);
+
 copy('jane-library.html', 'index.html');
 for (const item of ['styles.css', 'manifest.webmanifest', 'sw.js', 'src', 'assets']) copy(item, item);
 
 console.log('Static build ready in dist/.');
 
 function copy(from, to) {
+  if (shouldSkipCopy(from)) return;
   const source = path.join(root, from);
   const target = path.join(dist, to);
   const stat = fs.statSync(source);
@@ -56,4 +72,13 @@ function copy(from, to) {
   }
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.copyFileSync(source, target);
+}
+
+function shouldSkipCopy(file) {
+  const normalized = normalizeCopyPath(file);
+  return skippedCopies.has(normalized) || normalized.endsWith('.tmp.jpg');
+}
+
+function normalizeCopyPath(file) {
+  return file.split(path.sep).join('/');
 }

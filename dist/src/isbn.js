@@ -11,7 +11,7 @@ export function isLikelyIsbn(value) {
 
 export async function lookupBookByIsbn(rawIsbn, fetcher = fetch) {
   const isbn = cleanIsbn(rawIsbn);
-  if (!isLikelyIsbn(isbn)) throw new Error('That does not look like a full ISBN yet.');
+  if (!isLikelyIsbn(isbn)) throw new Error('That does not look like a full book barcode yet.');
   const [google, openLibrary] = await Promise.allSettled([
     fetchGoogleBooks(isbn, fetcher),
     fetchOpenLibraryByIsbn(isbn, fetcher)

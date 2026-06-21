@@ -20,7 +20,7 @@ Jane's Library is designed to have no ongoing operating cost.
 
 - Google Identity Services: optional browser OAuth for Google Drive backup. The public browser OAuth Client ID is configured; no client secret, backend or billing account is used by this app.
 - Google Drive API: optional browser backup/restore using the narrow `drive.file` scope. It creates/updates `janes-library-backup.json` in Jane's Drive with no paid storage service added by this app.
-- Google Books public API: used for ISBN and text lookup. No API key required.
+- Google Books public API: used for barcode and text lookup. No API key required.
 - Open Library public API: used as a free fallback/secondary source. No API key required.
 - Open Library cover images: used when returned by the public API.
 - jsDelivr CDN for optional browser libraries:

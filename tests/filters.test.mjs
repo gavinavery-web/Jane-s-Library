@@ -7,11 +7,13 @@ const books = [
   { title: 'Unrated Book', subtitle: '', authors: ['Jane Avery'], isbn13: '', publisher: '', category: 'Africa', shelfLocation: 'Main Shelves / Bay 1', status: 'Available', summary: '', notes: '', rating: 0 }
 ];
 
-test('search checks title, authors, ISBN, summary, notes and publisher', () => {
+test('search checks title, authors, ISBN, category, shelf, summary, notes and publisher', () => {
   assert.equal(filterBooks(books, { query: 'flawed' }).length, 1);
   assert.equal(filterBooks(books, { query: 'gavin' }).length, 1);
   assert.equal(filterBooks(books, { query: 'cottage press' }).length, 1);
   assert.equal(filterBooks(books, { query: '9781761069819' }).length, 1);
+  assert.equal(filterBooks(books, { query: 'africa' }).length, 2);
+  assert.equal(filterBooks(books, { query: 'window wall' }).length, 1);
 });
 
 test('filters combine category, author, shelf and status', () => {

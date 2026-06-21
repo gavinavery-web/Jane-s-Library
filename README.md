@@ -57,6 +57,8 @@ Google Drive backup is optional and keeps a safer copy called `janes-library-bac
 
 Google Drive backup uses Google Identity Services and the Google Drive API directly from the browser. It does not need a backend, billing account, API key or client secret.
 
+On iPhone, connect Google Drive from Safari first. The Home Screen app icon can still open Jane's Library, but Google sign-in popups may be more reliable in Safari.
+
 1. Create or use a Google Cloud project.
 2. Enable the **Google Drive API**.
 3. Configure the OAuth consent screen for Jane's Library.
@@ -76,12 +78,15 @@ Use the narrow Drive scope `https://www.googleapis.com/auth/drive.file`, so the 
 - Add Book manually
 - Edit and delete books
 - Personal 0-5 star ratings for each book
-- ISBN lookup using free public APIs
-- Barcode scanner with typed ISBN fallback
+- Structured categories with searchable subcategories and Manage Categories settings
+- Check In / Check Out borrowing workflow
+- Barcode lookup using free public APIs
+- Barcode scanner with typed barcode-number fallback
 - Shelf photo OCR/review workflow
 - Optional Google Drive backup and restore
 - JSON backup/import
-- CSV export
+- Download book list CSV with total quantity and numbered rows
+- iPhone-friendly PWA manifest and home-screen icons
 
 ## Testing
 
@@ -94,7 +99,7 @@ npm run serve
 npm run smoke
 ```
 
-`npm run smoke` opens headless Chrome and checks manual add, personal ratings, persistence, edit, search/filter, backup export/import, mocked Google Drive connect/save/restore wiring, scanner fallback, OCR upload/review path, delete, ISBN lookup and save.
+`npm run smoke` opens headless Chrome and checks manual add, personal ratings, persistence, edit, search/filter, backup export/import, mocked Google Drive connect/save/restore wiring, scanner fallback, OCR upload/review path, delete, barcode lookup and save.
 
 ## No-Cost Rule
 

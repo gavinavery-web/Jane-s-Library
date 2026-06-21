@@ -2,6 +2,20 @@ import { createIndexedDbDriver, createLibraryStore, normalizeBook } from './libr
 import { filterBooks, deriveFilterOptions } from './filters.js';
 import { lookupBookByIsbn, searchBooksByText } from './isbn.js';
 import { exportLibraryJson, parseLibraryBackup, booksToCsv } from './backup.js';
+import {
+  MAIN_CATEGORIES,
+  addCustomSubcategory,
+  getSubcategoryOptions,
+  hideSubcategory,
+  mergeCategorySettings,
+  normalizeCategorySettings,
+  recordRecentSubcategory,
+  renameSubcategory,
+  resetCategorySettings,
+  restoreDefaultCategories,
+  safeCategoryDisplay,
+  structuredCategorySuggestion
+} from './categories.js';
 import { GOOGLE_DRIVE_CLIENT_ID } from './config/googleDriveConfig.js';
 import {
   GOOGLE_DRIVE_SCOPE,
@@ -11,31 +25,96 @@ import {
   isDriveBackupNewerThanLocal,
   latestBookTimestamp
 } from './googleDriveBackup.js';
-import { extractCandidateQueries } from './ocrCandidates.js';
+import { analyseOcrText, filterShelfMatchesByOcr } from './ocrCandidates.js';
 
 const app = document.getElementById('app');
 const store = createLibraryStore(createIndexedDbDriver());
 const DRIVE_SESSION_KEY = 'janes-library-google-drive-session';
 const DRIVE_LAST_BACKUP_KEY = 'janes-library-last-google-drive-backup';
+const DRIVE_LAST_RESTORE_KEY = 'janes-library-last-google-drive-restore';
+const CATEGORY_SETTINGS_KEY = 'janes-library-category-settings';
+const UI_ASSETS = {
+  home: 'assets/ui/home-library.jpg',
+  shelves: 'assets/ui/shelves-library-optimized.jpg',
+  spines: 'assets/ui/book-spines-optimized.jpg',
+  settings: 'assets/ui/settings-library.jpg',
+  bookOpen: 'assets/ui/book-open.svg',
+  readingLady: 'assets/ui/reading-lady.svg',
+  donkey: 'assets/ui/library-donkey.svg'
+};
+const DONKEY_BACKUP_MESSAGES = [
+  'Backup saved. The donkey has kicked the data into Google Drive.',
+  'Backup complete. No books died. No shelves collapsed. Strong result.',
+  "Jane's Library is backed up. The donkey is smug and frankly unbearable.",
+  'Saved to Google Drive. Future Jane owes present Jane a coffee.',
+  'Backup done. Technology behaved for once, which is deeply suspicious.',
+  'All safe. The donkey checked the fence and the file.',
+  'Backup saved. Your books are now slightly less doomed.',
+  'Google Drive has the backup. The donkey has the glory.',
+  'Backup complete. Tiny hooves, massive responsibility.',
+  "Jane's Library is safe. The donkey has completed its sacred nonsense."
+];
+const DONKEY_HELPER_MESSAGES = [
+  'I checked the shelves. The books are breeding. Someone should intervene.',
+  'This library is dangerously close to becoming a structural engineering issue.',
+  'Another book? Lovely. The shelves have stopped screaming and entered acceptance.',
+  'I came for carrots and found a full-blown book hoarding incident.',
+  'The books are safe. The coffee, however, is one elbow away from tragedy.',
+  'I would help organise this, but I have hooves and standards.',
+  'Some people collect memories. Jane collects books and calls it furniture.',
+  "This is not a library anymore. It's a paper-based hostage situation.",
+  'I found the missing book. It was under twelve other missing books. Naturally.',
+  'The shelves are holding together through hope, dust, and denial.',
+  "One book at a time. That's how libraries are built and nervous breakdowns are avoided.",
+  "You don't have to organise the whole library today. Even I know that, and I eat grass.",
+  "A quiet coffee, pyjamas, a fire, and a good book. That's not a plan, that's survival.",
+  'Progress still counts when it is small. Annoying, but true.',
+  'The shelves do not need perfection. They just need slightly less chaos than yesterday.',
+  "You're making something lovely here, even if the books are pretending otherwise.",
+  'Some days, keeping things simple is the win. The donkey reluctantly approves.',
+  'Every book saved is one less thing future Jane has to swear about.',
+  'A good library is built slowly, usually by someone who said they were just browsing.',
+  "Today's achievement: the books are a little less feral.",
+  'Jane has entered the library. The books are acting innocent. I know what they did.',
+  'The donkey has reviewed the situation and recommends coffee before anyone makes more decisions.',
+  "The books are slightly more organised. Don't get cocky.",
+  'Jane said she only had a few books. That was adorable. Completely false, but adorable.',
+  'This library has categories now. Society may yet recover.',
+  'The shelves asked for help. I told them to be brave.',
+  "Jane's filing system appears to be: I will remember where I put that. Historic mistake.",
+  'Another book saved. Another tiny victory over domestic chaos.',
+  'The donkey believes in you. The shelves have requested a second opinion.',
+  'This is going well, which is suspicious and probably temporary.'
+];
 
 const state = {
   view: 'home',
   books: [],
   selectedId: '',
   editingId: '',
+  borrowSelectedId: '',
+  borrowMotion: '',
+  history: [],
   addMode: 'choices',
-  filters: { query: '', category: '', author: '', shelf: '', status: '', rating: '' },
+  filters: { query: '', category: '', subcategory: '', author: '', shelf: '', status: '', rating: '', recent: '' },
   message: null,
   lookupBook: null,
   candidateBook: null,
+  titleSearch: { query: '', results: [] },
+  categorySettings: loadCategorySettings(),
+  categoryManagerOpen: false,
+  donkeyMessage: '',
   ocr: { text: '', progress: 0, candidates: [], imageUrl: '' },
   scannerControls: null,
   scannerStream: null,
   scannerLoop: 0,
+  scannerActive: false,
+  scannerError: '',
   drive: {
     accessToken: '',
     tokenExpiresAt: 0,
     lastBackupAt: readLocalValue(DRIVE_LAST_BACKUP_KEY),
+    lastRestoreAt: readLocalValue(DRIVE_LAST_RESTORE_KEY),
     restorePreview: null,
     newerBackup: null
   }
@@ -55,6 +134,7 @@ function bindEvents() {
   document.addEventListener('click', handleClick);
   document.addEventListener('submit', handleSubmit);
   document.addEventListener('input', handleInput);
+  document.addEventListener('error', handleCoverError, true);
 }
 
 async function refreshBooks() {
@@ -86,13 +166,14 @@ function render() {
     <nav class="nav desktop-nav" aria-label="Main sections">
       ${navButton('home', 'Home', 'Start here')}
       ${navButton('browse', 'Browse Library', 'Find books')}
-      ${navButton('add', 'Add a Book', 'Scan, ISBN or manual')}
+      ${navButton('add', 'Add a Book', 'Scan, barcode or manual')}
       ${navButton('shelf', 'Scan Shelves', 'Photo text reader')}
       ${navButton('backup', 'Backup', 'Keep a safer copy')}
     </nav>
     ${messageHtml()}
     ${driveStartupPromptHtml()}
-    <main class="panel">
+    ${appBackButtonHtml()}
+    <main class="panel panel-${escapeAttr(state.view)}">
       ${screenHtml()}
     </main>
     <nav class="bottom-nav" aria-label="Mobile sections">
@@ -110,6 +191,7 @@ function screenHtml() {
   if (state.view === 'browse') return browseHtml();
   if (state.view === 'detail') return detailHtml();
   if (state.view === 'add') return addHtml();
+  if (state.view === 'borrow') return borrowHtml();
   if (state.view === 'edit') return editHtml();
   if (state.view === 'lookupReview') return reviewLookupHtml();
   if (state.view === 'candidateReview') return reviewCandidateHtml();
@@ -141,6 +223,7 @@ function bottomNavButton(view, label, icon) {
 function navCurrent(view) {
   if (state.view === view) return true;
   if (view === 'browse' && state.view === 'detail') return true;
+  if (view === 'browse' && state.view === 'borrow') return true;
   if (view === 'add' && ['edit', 'lookupReview', 'candidateReview'].includes(state.view)) return true;
   return false;
 }
@@ -152,22 +235,31 @@ function homeHtml() {
     .sort((a, b) => new Date(b.dateAdded || b.lastUpdated || 0) - new Date(a.dateAdded || a.lastUpdated || 0))
     .slice(0, 6);
   return `
-    <section class="home-hero">
-      <div>
-        <span class="eyebrow">Welcome back</span>
-        <h2>What would Jane like to do?</h2>
-        <p>Everything saves on this device automatically. Google Drive and emergency downloads can keep a safer copy.</p>
+    <section class="home-hero photo-hero" style="--hero-image: url('${UI_ASSETS.home}')">
+      <div class="hero-copy">
+        <span class="eyebrow">Private home library</span>
+        <h2>Jane's Library</h2>
+        <p>A simple catalogue for Jane's books.</p>
+        <div class="hero-actions">
+          <button type="button" data-view="shelf">Scan Shelves</button>
+          <button class="light" type="button" data-action="add-mode" data-mode="barcode">Scan Barcode</button>
+        </div>
       </div>
       <div class="home-stat">
-        <strong>${borrowed}</strong>
-        <span>${borrowed === 1 ? 'borrowed book' : 'borrowed books'}</span>
+        <strong>${total}</strong>
+        <span>${total === 1 ? 'book saved' : 'books saved'}</span>
+        <small>${borrowed} checked out</small>
       </div>
     </section>
     <section class="action-grid" aria-label="Main actions">
-      ${homeAction('browse', 'Browse Library', 'Search, filter and open saved books.', 'Browse')}
-      ${homeAction('add', 'Add a Book', 'Scan a barcode, enter an ISBN or type details by hand.', 'Add')}
-      ${homeAction('shelf', 'Scan Shelves', 'Upload a shelf photo and review possible matches.', 'Scan')}
-      ${homeAction('backup', 'Backup', 'Save a safer copy or restore from one.', 'Backup')}
+      ${homeAction('shelf', 'Scan Shelves', 'Photograph a shelf and review possible matches.', 'Start', 'book-open')}
+      ${homeAction('add', 'Scan Barcode', 'Use the camera or type the barcode number.', 'Scan', 'barcode', 'add-mode', 'barcode')}
+      ${homeAction('add', 'Add Book', 'Search by title, barcode or type details by hand.', 'Add', 'book-open')}
+      ${homeAction('browse', 'Browse Library', 'Search, filter and open saved books.', 'Browse', 'book-open')}
+    </section>
+    <section class="secondary-actions" aria-label="Secondary actions">
+      <button class="light" type="button" data-view="backup">Backup / Settings</button>
+      <button class="light" type="button" data-action="open-category-manager">Manage Categories</button>
     </section>
     <section class="recent-section">
       <div class="section-title">
@@ -177,19 +269,40 @@ function homeHtml() {
         </div>
         ${total ? '<button class="light" type="button" data-view="browse">See All Books</button>' : ''}
       </div>
-      ${recent.length ? recentBooksHtml(recent) : `<div class="empty">No books yet. Start with Add a Book.</div>`}
+      ${recent.length ? recentBooksHtml(recent) : `
+        <div class="empty illustrated-empty">
+          <img src="${UI_ASSETS.readingLady}" alt="" aria-hidden="true">
+          <p>No books yet. Start with Add Book, Scan Barcode or Scan Shelves.</p>
+        </div>
+      `}
     </section>
+    ${donkeyHelperHtml('home-donkey')}
     <p class="home-quote">A home library should feel easy to return to.</p>
   `;
 }
 
-function homeAction(view, title, text, cta) {
+function homeAction(view, title, text, cta, icon = 'book-open', action = '', mode = '') {
   return `
-    <button class="action-card" type="button" data-view="${escapeAttr(view)}">
+    <button class="action-card" type="button" ${action ? `data-action="${escapeAttr(action)}"` : `data-view="${escapeAttr(view)}"`} ${mode ? `data-mode="${escapeAttr(mode)}"` : ''}>
+      <img src="${icon === 'barcode' ? UI_ASSETS.spines : UI_ASSETS.bookOpen}" alt="" aria-hidden="true">
       <span class="action-kicker">${escapeHtml(cta)}</span>
       <strong>${escapeHtml(title)}</strong>
       <span>${escapeHtml(text)}</span>
     </button>
+  `;
+}
+
+function donkeyHelperHtml(extraClass = '') {
+  return `
+    <section class="donkey-helper ${escapeAttr(extraClass)}">
+      <img src="${UI_ASSETS.donkey}" alt="" aria-hidden="true">
+      <div>
+        <h3>Library Donkey</h3>
+        <p>Tap for wisdom, nonsense, or mild judgement.</p>
+        <button class="light" type="button" data-action="donkey-wisdom">Ask the Donkey</button>
+        ${state.donkeyMessage ? `<p class="donkey-message">${escapeHtml(state.donkeyMessage)}</p>` : ''}
+      </div>
+    </section>
   `;
 }
 
@@ -223,32 +336,52 @@ function driveStartupPromptHtml() {
   `;
 }
 
+function appBackButtonHtml() {
+  if (state.view === 'home' || !state.history.length) return '';
+  return `<button class="app-back-button light" type="button" data-action="app-back">Back</button>`;
+}
+
 function browseHtml() {
   const options = deriveFilterOptions(state.books);
-  const results = filterBooks(state.books, state.filters);
+  const results = filteredBrowseBooks();
   const hasFilters = Object.values(state.filters).some(Boolean);
+  const subcategoryOptions = state.filters.category
+    ? getSubcategoryOptions(state.categorySettings, state.filters.category)
+    : allVisibleSubcategories();
   return `
-    <div class="panel-header">
+    <section class="screen-banner browse-banner" style="--banner-image: url('${UI_ASSETS.shelves}')">
       <div>
+        <span class="eyebrow">Shelf browsing</span>
         <h2>Browse Library</h2>
-        <p>Search by title, author, shelf, notes or ISBN.</p>
+        <p>Search title, author, category or shelf.</p>
       </div>
-      <button type="button" data-view="add">Add a Book</button>
-    </div>
+      <button type="button" data-view="borrow">Check In / Check Out</button>
+    </section>
     <form class="search-form" data-form="filters">
-      ${field('query', 'Search Jane\'s books', state.filters.query, 'search', 'Title, author, ISBN or notes')}
+      ${field('query', 'Search Jane\'s books', state.filters.query, 'search', 'Search title, author, category or shelf')}
       <input type="hidden" name="category" value="${escapeAttr(state.filters.category)}">
+      <input type="hidden" name="subcategory" value="${escapeAttr(state.filters.subcategory)}">
       <input type="hidden" name="author" value="${escapeAttr(state.filters.author)}">
       <input type="hidden" name="shelf" value="${escapeAttr(state.filters.shelf)}">
       <input type="hidden" name="status" value="${escapeAttr(state.filters.status)}">
       <input type="hidden" name="rating" value="${escapeAttr(state.filters.rating)}">
+      <input type="hidden" name="recent" value="${escapeAttr(state.filters.recent || '')}">
       <button type="submit">Search</button>
     </form>
+    <div class="filter-chips" aria-label="Quick filters">
+      ${quickFilterChip('Fiction', 'category', 'Fiction')}
+      ${quickFilterChip('Non-Fiction', 'category', 'Non-Fiction')}
+      ${quickFilterChip('To Review', 'category', 'Uncategorised')}
+      ${quickFilterChip('Borrowed', 'status', 'Borrowed')}
+      ${quickFilterChip('Recently Added', 'recent', '1')}
+    </div>
     <details class="filter-drawer" ${hasFilters ? 'open' : ''}>
       <summary>Filters${hasFilters ? ' active' : ''}</summary>
       <form class="filters" data-form="filters">
         <input type="hidden" name="query" value="${escapeAttr(state.filters.query)}">
-        ${selectField('category', 'Category', state.filters.category, ['', ...options.categories])}
+        <input type="hidden" name="recent" value="${escapeAttr(state.filters.recent || '')}">
+        ${selectField('category', 'Main category', state.filters.category, ['', ...MAIN_CATEGORIES])}
+        ${selectField('subcategory', 'Subcategory', state.filters.subcategory, ['', ...subcategoryOptions, ...options.subcategories])}
         ${selectField('author', 'Author', state.filters.author, ['', ...options.authors])}
         ${selectField('shelf', 'Shelf', state.filters.shelf, ['', ...options.shelves])}
         ${selectField('status', 'Status', state.filters.status, ['', ...options.statuses])}
@@ -265,8 +398,23 @@ function browseHtml() {
         </div>
       </form>
     </details>
-    ${bookListHtml(results, state.books.length ? 'No books match those filters. Try clearing the filters.' : "Jane's library is empty. Add the first book by hand, ISBN or barcode.")}
+    ${bookListHtml(results, state.books.length ? 'No books match those filters. Try clearing the filters.' : "Jane's library is empty. Add the first book by hand or barcode.")}
   `;
+}
+
+function quickFilterChip(label, filter, value) {
+  const current = state.filters[filter] === value;
+  return `<button class="filter-chip ${current ? 'active' : ''}" type="button" data-action="quick-filter" data-filter="${escapeAttr(filter)}" data-value="${escapeAttr(value)}">${escapeHtml(label)}</button>`;
+}
+
+function filteredBrowseBooks() {
+  let results = filterBooks(state.books, state.filters);
+  if (state.filters.recent) {
+    results = [...results]
+      .sort((a, b) => new Date(b.dateAdded || b.lastUpdated || 0) - new Date(a.dateAdded || a.lastUpdated || 0))
+      .slice(0, 24);
+  }
+  return results;
 }
 
 function bookListHtml(books, emptyText) {
@@ -279,7 +427,7 @@ function bookCardHtml(book) {
     <button class="book-card" type="button" data-action="open-book" data-id="${escapeAttr(book.id)}">
       ${coverHtml(book)}
       <span class="book-card-body">
-        <span class="badge">${escapeHtml(book.category || 'Uncategorised')}</span>
+        <span class="badge">${escapeHtml(safeCategoryDisplay(book))}</span>
         <h3>${escapeHtml(book.title || 'Untitled book')}</h3>
         <p class="book-author">${escapeHtml(authorLine(book) || 'Author unknown')}</p>
         ${ratingDisplayHtml(book.rating)}
@@ -293,8 +441,22 @@ function bookCardHtml(book) {
 
 function coverHtml(book) {
   const src = book.coverImageData || book.coverImageUrl;
-  if (src) return `<img class="cover" src="${escapeAttr(src)}" alt="Cover for ${escapeAttr(book.title)}">`;
+  if (src) return `<img class="cover" data-cover-fallback="true" src="${escapeAttr(src)}" alt="Cover for ${escapeAttr(book.title)}">`;
+  return fallbackCoverHtml();
+}
+
+function fallbackCoverHtml() {
   return `<span class="cover">Jane's<br>Library</span>`;
+}
+
+function handleCoverError(event) {
+  const image = event.target;
+  if (!(image instanceof HTMLImageElement) || image.dataset.coverFallback !== 'true') return;
+
+  const fallback = document.createElement('span');
+  fallback.className = 'cover';
+  fallback.innerHTML = "Jane's<br>Library";
+  image.replaceWith(fallback);
 }
 
 function detailHtml() {
@@ -302,20 +464,21 @@ function detailHtml() {
   if (!book) return `<div class="empty">That book is no longer in the library.</div>`;
   return `
     <button class="linkish back-button" type="button" data-view="browse">Back to Browse</button>
-    <article class="book-detail">
+    <article class="book-detail detail-card" style="--detail-image: url('${UI_ASSETS.spines}')">
       <div class="detail-cover">${coverHtml(book)}</div>
       <div class="detail-main">
-        <span class="badge">${escapeHtml(book.category || 'Uncategorised')}</span>
+        <span class="badge">${escapeHtml(safeCategoryDisplay(book))}</span>
         <h2>${escapeHtml(book.title)}</h2>
         ${book.subtitle ? `<p class="subtitle">${escapeHtml(book.subtitle)}</p>` : ''}
         <p class="detail-author">${escapeHtml(authorLine(book) || 'Author unknown')}</p>
         ${ratingDisplayHtml(book.rating)}
+        ${borrowingDetailCardHtml(book)}
         <dl class="info-card">
-          ${detail('Shelf', book.shelfLocation || 'No shelf yet')}
-          ${detail('Added', formatDate(book.dateAdded) || 'Not recorded')}
-          ${detail('Status', book.status || 'Available')}
-          ${detail('ISBN', [book.isbn13, book.isbn10].filter(Boolean).join(' / ') || 'Not recorded')}
-        </dl>
+        ${detail('Shelf', book.shelfLocation || 'No shelf yet')}
+        ${detail('Added', formatDate(book.dateAdded) || 'Not recorded')}
+        ${detail('Status', book.status || 'Available')}
+        ${detail('Book barcode', [book.isbn13, book.isbn10].filter(Boolean).join(' / ') || 'Not recorded')}
+      </dl>
         ${(book.summary || book.notes) ? `
           <section class="notes-card">
             ${book.summary ? `<h3>Summary</h3><p>${escapeHtml(book.summary)}</p>` : ''}
@@ -325,7 +488,7 @@ function detailHtml() {
         <details class="more-details">
           <summary>More details</summary>
           <dl class="detail-list">
-            ${detail('Subcategory', book.subcategory)}
+            ${detail('Category', safeCategoryDisplay(book))}
             ${detail('Borrowed by', book.borrowedBy)}
             ${detail('Borrowed date', book.borrowedDate)}
             ${detail('Returned date', book.returnedDate)}
@@ -336,6 +499,7 @@ function detailHtml() {
         </details>
         <div class="detail-actions">
           <button type="button" data-action="edit-book" data-id="${escapeAttr(book.id)}">Edit Book</button>
+          <button class="light" type="button" data-action="borrow-this-book" data-id="${escapeAttr(book.id)}">Check In / Check Out</button>
           <button class="danger light-danger" type="button" data-action="delete-book" data-id="${escapeAttr(book.id)}">Delete Book</button>
         </div>
       </div>
@@ -343,15 +507,68 @@ function detailHtml() {
   `;
 }
 
+function borrowingDetailCardHtml(book) {
+  const borrowed = book.status === 'Borrowed';
+  return `
+    <section class="borrowing-card ${borrowed ? 'borrowed' : ''}">
+      <span class="stamp-badge">${borrowed ? 'Checked Out' : 'Available'}</span>
+      <p>${borrowed ? `${escapeHtml(book.borrowedBy || 'Someone')} has this book.` : 'This book is on Jane\'s shelves.'}</p>
+      ${borrowed ? `<p>${escapeHtml([book.borrowedDate && `Borrowed ${book.borrowedDate}`, book.returnedDate && `Due ${book.returnedDate}`].filter(Boolean).join(' - ') || 'Dates not recorded')}</p>` : ''}
+      <button class="light" type="button" data-action="borrow-this-book" data-id="${escapeAttr(book.id)}">Check In / Check Out</button>
+    </section>
+  `;
+}
+
+function borrowHtml() {
+  const borrowedBooks = state.books.filter((book) => book.status === 'Borrowed');
+  const selectedId = state.borrowSelectedId || state.books[0]?.id || '';
+  return `
+    <section class="screen-banner borrow-banner" style="--banner-image: url('${UI_ASSETS.settings}')">
+      <div>
+        <span class="eyebrow">Library card</span>
+        <h2>Check In / Check Out</h2>
+        <p>A simple old-library-card style place to track who has borrowed a book.</p>
+      </div>
+      <button class="light" type="button" data-view="browse">Back to Browse</button>
+    </section>
+    ${state.borrowMotion ? `<div class="borrow-animation ${escapeAttr(state.borrowMotion)}" aria-hidden="true">Book</div>` : ''}
+    <section class="borrow-layout">
+      <form data-form="borrow-checkout" class="library-card">
+        <h3>Check out a book</h3>
+        ${selectField('bookId', 'Choose book', selectedId, state.books.map((book) => [book.id, `${book.title || 'Untitled'} - ${authorLine(book) || 'Author unknown'}`]))}
+        ${field('borrowedBy', 'Borrowed by', '', 'text', 'Name', true)}
+        ${field('borrowedDate', 'Borrowed date', new Date().toISOString().slice(0, 10), 'date')}
+        ${field('returnedDate', 'Due / return date', '', 'date')}
+        ${textareaField('notes', 'Borrowing notes', '')}
+        <button type="submit">Check Out Book</button>
+      </form>
+      <section class="library-card">
+        <h3>Currently borrowed</h3>
+        ${borrowedBooks.length ? borrowedBooks.map((book) => `
+          <article class="borrowed-row">
+            <div>
+              <strong>${escapeHtml(book.title || 'Untitled')}</strong>
+              <p>${escapeHtml(book.borrowedBy || 'Borrower not recorded')}</p>
+              <p>${escapeHtml([book.borrowedDate && `Borrowed ${book.borrowedDate}`, book.returnedDate && `Due ${book.returnedDate}`].filter(Boolean).join(' - ') || 'Dates not recorded')}</p>
+            </div>
+            <button type="button" data-action="check-in-book" data-id="${escapeAttr(book.id)}">Check In</button>
+          </article>
+        `).join('') : '<div class="empty">No books are currently checked out.</div>'}
+      </section>
+    </section>
+  `;
+}
+
 function addHtml() {
   return `
-    <div class="panel-header">
+    <section class="screen-banner add-banner" style="--banner-image: url('${UI_ASSETS.spines}')">
       <div>
+        <span class="eyebrow">New book</span>
         <h2>Add a Book</h2>
         <p>Choose the easiest way to add the next book.</p>
       </div>
       <button class="light" type="button" data-view="home">Back Home</button>
-    </div>
+    </section>
     ${addModeHtml()}
   `;
 }
@@ -360,6 +577,7 @@ function addModeHtml() {
   if (state.addMode === 'choices') return addChoicesHtml();
   if (state.addMode === 'isbn') return isbnLookupHtml();
   if (state.addMode === 'barcode') return barcodeHtml();
+  if (state.addMode === 'title') return titleSearchHtml();
   return bookFormHtml(normalizeBook({}), 'create');
 }
 
@@ -369,12 +587,17 @@ function addChoicesHtml() {
       <button class="choice-card" type="button" data-action="add-mode" data-mode="barcode">
         <span>Scan</span>
         <strong>Scan Barcode</strong>
-        <small>Use the phone camera to read the ISBN, then review before saving.</small>
+        <small>Use the phone camera to read the book barcode, then review before saving.</small>
       </button>
       <button class="choice-card" type="button" data-action="add-mode" data-mode="isbn">
-        <span>ISBN</span>
-        <strong>Enter ISBN</strong>
+        <span>Barcode</span>
+        <strong>Add by Barcode Number</strong>
         <small>Type the number and look up details from free book catalogues.</small>
+      </button>
+      <button class="choice-card" type="button" data-action="add-mode" data-mode="title">
+        <span>Search</span>
+        <strong>Search by Title / Author</strong>
+        <small>Search free catalogues, then review the result before saving.</small>
       </button>
       <button class="choice-card" type="button" data-action="add-mode" data-mode="manual">
         <span>Manual</span>
@@ -382,6 +605,44 @@ function addChoicesHtml() {
         <small>Type the important details yourself.</small>
       </button>
     </div>
+  `;
+}
+
+function titleSearchHtml() {
+  return `
+    <div class="mode-header">
+      <button class="linkish" type="button" data-action="add-mode" data-mode="choices">Back to add choices</button>
+      <h3>Search by Title / Author</h3>
+      <p>Search free book catalogues. Jane reviews the book before saving it.</p>
+    </div>
+    <form data-form="title-search" class="isbn-panel">
+      ${field('query', 'Book title or author', state.titleSearch.query, 'search', 'Example: Nobody\'s Girl Virginia Roberts', true)}
+      <div class="actions">
+        <button type="submit">Search Free Catalogues</button>
+        <button class="light" type="button" data-action="add-mode" data-mode="manual">Add Manually Instead</button>
+      </div>
+    </form>
+    ${titleSearchResultsHtml()}
+  `;
+}
+
+function titleSearchResultsHtml() {
+  if (!state.titleSearch.results.length) return '';
+  return `
+    <section class="candidate-list title-search-results">
+      ${state.titleSearch.results.map((book, index) => `
+        <article class="candidate">
+          ${coverHtml(book)}
+          <div>
+            <span class="badge">${escapeHtml(book.source || 'Book catalogue')}</span>
+            <h3>${escapeHtml(book.title || 'Possible book')}</h3>
+            <p>${escapeHtml(authorLine(book) || 'Author unknown')}</p>
+            <p>${escapeHtml(shortText(book.summary || book.category || '', 120))}</p>
+            <button type="button" data-action="review-title-result" data-index="${index}">Review & Save</button>
+          </div>
+        </article>
+      `).join('')}
+    </section>
   `;
 }
 
@@ -404,11 +665,11 @@ function isbnLookupHtml() {
   return `
     <div class="mode-header">
       <button class="linkish" type="button" data-action="add-mode" data-mode="choices">Back to add choices</button>
-      <h3>Enter ISBN</h3>
+      <h3>Add by Barcode Number</h3>
       <p>Jane can review the result before anything is saved.</p>
     </div>
     <form data-form="isbn" class="isbn-panel">
-      ${field('isbn', 'ISBN or barcode number', '', 'text', 'Example: 9781761069819', true)}
+      ${field('isbn', 'Book barcode number', '', 'text', 'Example: 9781761069819', true)}
       <div class="actions">
         <button type="submit">Find Book</button>
         <button class="light" type="button" data-action="add-mode" data-mode="manual">Add by Hand Instead</button>
@@ -418,19 +679,24 @@ function isbnLookupHtml() {
 }
 
 function barcodeHtml() {
+  const active = state.scannerActive;
+  const failed = Boolean(state.scannerError);
   return `
     <div class="mode-header">
       <button class="linkish" type="button" data-action="add-mode" data-mode="choices">Back to add choices</button>
       <h3>Scan Barcode</h3>
-      <p>Use this on a phone over HTTPS. If the camera is blocked, type the ISBN instead.</p>
+      <p>Hold the book barcode in front of the camera. It will scan automatically.</p>
     </div>
     <div class="scanner-wrap">
       <video id="barcode-video" playsinline muted aria-label="Barcode camera preview"></video>
-      <p class="message scanner-status">Camera is closed. Open it when Jane is ready to scan.</p>
+      <p class="message scanner-status ${failed ? 'bad' : ''}">
+        ${escapeHtml(active ? 'Camera is open — hold barcode still' : (failed ? `${state.scannerError} Try the camera again or add by barcode number.` : 'Camera is closed. Open it when Jane is ready to scan.'))}
+      </p>
       <div class="actions">
-        <button type="button" data-action="start-scanner">Open Camera</button>
-        <button class="light" type="button" data-action="stop-scanner">Stop Camera</button>
-        <button class="linkish" type="button" data-action="add-mode" data-mode="isbn">Type ISBN Instead</button>
+        ${active
+          ? '<button class="light" type="button" data-action="stop-scanner">Cancel Scan</button>'
+          : `<button type="button" data-action="start-scanner">${failed ? 'Try Camera Again' : 'Scan Barcode'}</button>
+             <button class="light" type="button" data-action="add-mode" data-mode="isbn">Enter Barcode Manually</button>`}
       </div>
     </div>
   `;
@@ -480,20 +746,33 @@ function importPreviewHtml(book) {
 
 function shelfScanHtml() {
   return `
-    <div class="panel-header">
+    <section class="screen-banner shelf-banner" style="--banner-image: url('${UI_ASSETS.shelves}')">
       <div>
+        <span class="eyebrow">Shelf photo reader</span>
         <h2>Scan Shelves</h2>
-        <p>Take or upload a shelf photo. Text recognition runs in the browser and nothing is saved until Jane confirms it.</p>
+        <p>Take a photo of a bookshelf. Jane's Library will try to read the book spines and suggest possible matches for you to review.</p>
       </div>
       <button class="light" type="button" data-view="home">Back Home</button>
-    </div>
-    <form data-form="ocr" class="form-grid">
-      <label class="wide">Shelf photo
-        <input type="file" name="photo" accept="image/*" capture="environment" required>
+    </section>
+    <ol class="shelf-steps">
+      <li>Take or upload shelf photo</li>
+      <li>Read book spines</li>
+      <li>Review possible matches</li>
+      <li>Save selected books</li>
+    </ol>
+    <form data-form="ocr" class="shelf-scan-card">
+      <label class="photo-picker wide">
+        <span>Take Shelf Photo</span>
+        <small>Open camera or choose a shelf photo</small>
+        <input type="file" name="photo" accept="image/*" capture="environment" required aria-label="Take shelf photo">
       </label>
-      <label class="wide">Extracted text
-        <textarea name="ocrText" placeholder="Text from the photo will appear here. Jane can edit it before searching.">${escapeHtml(state.ocr.text)}</textarea>
-      </label>
+      ${state.ocr.imageUrl ? `<img class="photo-preview" src="${escapeAttr(state.ocr.imageUrl)}" alt="Selected shelf photo preview">` : ''}
+      <details class="ocr-text-review wide">
+        <summary>Review detected text</summary>
+        <label>Detected shelf text
+          <textarea name="ocrText" placeholder="Text from the photo will appear here. Jane can edit it before searching.">${escapeHtml(state.ocr.text)}</textarea>
+        </label>
+      </details>
       <progress class="wide" value="${state.ocr.progress}" max="100" aria-label="OCR progress"></progress>
       <div class="actions wide">
         <button type="submit">Read Shelf Photo</button>
@@ -501,7 +780,6 @@ function shelfScanHtml() {
         <button class="linkish" type="button" data-view="add">Add by Hand Instead</button>
       </div>
     </form>
-    ${state.ocr.imageUrl ? `<img class="photo-preview" src="${escapeAttr(state.ocr.imageUrl)}" alt="Selected shelf photo preview">` : ''}
     ${candidateListHtml()}
   `;
 }
@@ -513,10 +791,17 @@ function candidateListHtml() {
     <div class="candidate-list">
       ${state.ocr.candidates.map((book, index) => `
         <article class="candidate">
-          <h3>${escapeHtml(book.title || 'Possible book')}</h3>
-          <p>${escapeHtml(authorLine(book) || book.source || 'From shelf text')}</p>
-          <p>${escapeHtml(shortText(book.summary || book.category || '', 120))}</p>
-          <button type="button" data-action="review-candidate" data-index="${index}">Review & Save</button>
+          ${coverHtml(book)}
+          <div>
+            <span class="badge">${escapeHtml(book.matchConfidence || 'Needs review')}</span>
+            <h3>${escapeHtml(book.title || 'Possible book')}</h3>
+            <p>${escapeHtml(authorLine(book) || book.source || 'From shelf text')}</p>
+            <p>${escapeHtml(book.matchReason || shortText(book.summary || book.category || '', 120))}</p>
+            <div class="actions">
+              <button type="button" data-action="review-candidate" data-index="${index}">Review & Save</button>
+              <button class="light" type="button" data-action="skip-ocr-candidate" data-index="${index}">Skip</button>
+            </div>
+          </div>
         </article>
       `).join('')}
     </div>
@@ -528,30 +813,55 @@ function backupHtml() {
   const connected = hasValidDriveToken();
   const localChange = latestBookTimestamp(state.books);
   return `
-    <div class="panel-header">
+    <section class="screen-banner backup-banner" style="--banner-image: url('${UI_ASSETS.settings}')">
       <div>
-        <h2>Backup</h2>
+        <span class="eyebrow">Safe copy</span>
+        <h2>Backup / Settings</h2>
         <p>Your library saves on this device automatically. Google Drive backup keeps a safer copy.</p>
       </div>
       <button class="light" type="button" data-view="home">Back Home</button>
-    </div>
+    </section>
     <div class="backup-grid">
+      <section class="backup-card wide donkey-backup-card">
+        <button class="donkey-button" type="button" data-action="drive-save" aria-label="Back Up Now">
+          <img src="${UI_ASSETS.donkey}" alt="Library Donkey">
+        </button>
+        <div>
+          <span class="eyebrow">Library Donkey</span>
+          <h3>Donkey Backup</h3>
+          <p>Tap the donkey to save Jane's Library to Google Drive.</p>
+          <div class="actions">
+            <button type="button" data-action="drive-save">Back Up Now</button>
+            <button class="light" type="button" data-action="donkey-wisdom">Ask the Donkey</button>
+          </div>
+          ${state.donkeyMessage ? `<p class="donkey-message">${escapeHtml(state.donkeyMessage)}</p>` : '<p class="small-note">Tap for wisdom, nonsense, or mild judgement.</p>'}
+        </div>
+      </section>
       <section class="backup-card wide drive-card">
         <h3>Google Drive backup</h3>
         <p>Optional backup to Jane's Google Drive. The library still works on this device without it.</p>
+        <p class="small-note">On iPhone, connect Google Drive in Safari first. If sign-in does not open from the Home Screen icon, open Jane's Library in Safari and try again.</p>
         <dl class="status-list">
           <dt>Google Drive status</dt>
-          <dd>${connected ? 'Connected' : 'Not connected'}</dd>
+          <dd>${connected ? '<span class="drive-connected-pill">Connected to Google Drive</span>' : 'Not connected'}</dd>
           <dt>Last local change</dt>
           <dd>${escapeHtml(formatDateTime(localChange) || 'No local books yet')}</dd>
           <dt>Last Google Drive backup</dt>
           <dd>${escapeHtml(formatDateTime(state.drive.lastBackupAt) || 'No Drive backup saved from this browser yet')}</dd>
+          <dt>Last restore</dt>
+          <dd>${escapeHtml(formatDateTime(state.drive.lastRestoreAt) || 'No Drive restore from this browser yet')}</dd>
+          <dt>Backup folder</dt>
+          <dd>Jane's Library Backups</dd>
+          <dt>Backup file</dt>
+          <dd>janes-library-backup.json</dd>
         </dl>
         ${config.configured ? '' : `<p class="message">${escapeHtml(config.message)}</p>`}
         <div class="actions">
-          <button type="button" data-action="drive-connect">Connect Google Drive</button>
-          <button type="button" data-action="drive-save">Save Backup</button>
-          <button type="button" data-action="drive-restore">Restore Backup</button>
+          ${connected
+            ? '<button class="connected-button" type="button" disabled>Connected to Google Drive</button>'
+            : '<button type="button" data-action="drive-connect">Connect Google Drive</button>'}
+          <button type="button" data-action="drive-save">Back Up Now</button>
+          <button type="button" data-action="drive-restore">Restore from Drive</button>
           <button class="light" type="button" data-action="drive-disconnect">Disconnect Google Drive</button>
         </div>
         ${driveRestorePreviewHtml()}
@@ -559,7 +869,7 @@ function backupHtml() {
       <section class="backup-card">
         <h3>Emergency backup</h3>
         <p>Download a full backup file. Keep it somewhere safe in case Jane needs it later.</p>
-        <button type="button" data-action="export-json">Download emergency backup</button>
+        <button type="button" data-action="export-json">Download Backup File</button>
       </section>
       <section class="backup-card">
         <h3>Book list</h3>
@@ -586,7 +896,40 @@ function backupHtml() {
         <p>Clears this browser's local library only. Download a backup first.</p>
         <button class="danger" type="button" data-action="clear-library">Clear local library</button>
       </details>
+      ${manageCategoriesHtml()}
     </div>
+  `;
+}
+
+function manageCategoriesHtml() {
+  const fictionOptions = getSubcategoryOptions(state.categorySettings, 'Fiction');
+  const nonFictionOptions = getSubcategoryOptions(state.categorySettings, 'Non-Fiction');
+  const allOptions = [...fictionOptions, ...nonFictionOptions];
+  return `
+    <details class="backup-card wide category-manager" ${state.categoryManagerOpen ? 'open' : ''}>
+      <summary>Manage Categories</summary>
+      <p>Jane can add, rename or hide subcategories. Fiction, Non-Fiction and Uncategorised always stay available.</p>
+      <form data-form="category-add" class="category-manager-form">
+        ${selectField('category', 'Add under', 'Fiction', ['Fiction', 'Non-Fiction'])}
+        ${field('subcategory', 'New subcategory', '', 'text', 'Example: Family Saga', true)}
+        <button type="submit">Add subcategory</button>
+      </form>
+      <form data-form="category-rename" class="category-manager-form">
+        ${selectField('category', 'Rename under', 'Fiction', ['Fiction', 'Non-Fiction'])}
+        ${fieldWithList('oldSubcategory', 'Existing subcategory', '', 'category-manager-rename-options', allOptions, 'Start typing an existing subcategory', true)}
+        ${field('newSubcategory', 'New name', '', 'text', 'Example: Family Stories', true)}
+        <button type="submit">Rename subcategory</button>
+      </form>
+      <form data-form="category-hide" class="category-manager-form">
+        ${selectField('category', 'Hide from', 'Fiction', ['Fiction', 'Non-Fiction'])}
+        ${fieldWithList('subcategory', 'Subcategory to hide', '', 'category-manager-hide-options', allOptions, 'Start typing a subcategory', true)}
+        <button type="submit">Hide subcategory</button>
+      </form>
+      <div class="actions">
+        <button class="light" type="button" data-action="restore-default-categories">Restore default categories</button>
+        <button class="danger light-danger" type="button" data-action="reset-category-settings">Reset all categories to approved list</button>
+      </div>
+    </details>
   `;
 }
 
@@ -616,6 +959,7 @@ function driveRestorePreviewHtml() {
 }
 
 function bookFormHtml(book, mode) {
+  if (mode === 'lookup' || mode === 'candidate') book = { ...book, ...structuredCategorySuggestion(book) };
   return `
     <form data-form="book" data-mode="${escapeAttr(mode)}" data-id="${escapeAttr(book.id || '')}">
       <input type="hidden" name="coverImageData" value="${escapeAttr(book.coverImageData || '')}">
@@ -644,10 +988,9 @@ function bookFormHtml(book, mode) {
             ${field('subtitle', 'Subtitle', book.subtitle)}
             ${field('publisher', 'Publisher', book.publisher)}
             ${field('publishedDate', 'Published date', book.publishedDate)}
-            ${field('isbn13', 'ISBN-13', book.isbn13)}
-            ${field('isbn10', 'ISBN-10', book.isbn10)}
-            ${field('category', 'Category', book.category)}
-            ${field('subcategory', 'Subcategory', book.subcategory)}
+            ${field('isbn13', '13-digit barcode', book.isbn13)}
+            ${field('isbn10', '10-digit book code', book.isbn10)}
+            ${categoryFieldsHtml(book, mode)}
             ${field('coverImageUrl', 'Cover image URL', book.coverImageUrl)}
             ${field('source', 'Source', book.source || (mode === 'create' ? 'Manual' : ''))}
             ${field('borrowedBy', 'Borrowed by', book.borrowedBy)}
@@ -673,12 +1016,18 @@ async function handleSubmit(event) {
   if (kind === 'filters') return applyFilters(form);
   if (kind === 'book') return saveBookForm(form);
   if (kind === 'isbn') return runIsbnLookup(form);
+  if (kind === 'title-search') return runTitleSearch(form);
   if (kind === 'ocr') return runOcr(form);
   if (kind === 'import') return importBackup(form);
+  if (kind === 'category-add') return addCategoryFromForm(form);
+  if (kind === 'category-rename') return renameCategoryFromForm(form);
+  if (kind === 'category-hide') return hideCategoryFromForm(form);
+  if (kind === 'borrow-checkout') return checkOutBook(form);
 }
 
 function handleInput(event) {
   if (event.target.name === 'ocrText') state.ocr.text = event.target.value;
+  if (event.target.name === 'category') updateSubcategoryDatalist(event.target);
 }
 
 async function handleClick(event) {
@@ -686,15 +1035,24 @@ async function handleClick(event) {
   if (!button) return;
   const action = button.dataset.action;
   if (button.dataset.view) return setView(button.dataset.view);
+  if (action === 'app-back') return goBack();
   if (action === 'open-book') return openBook(button.dataset.id);
   if (action === 'edit-book') return editBook(button.dataset.id);
+  if (action === 'borrow-this-book') return openBorrowing(button.dataset.id);
+  if (action === 'check-in-book') return checkInBook(button.dataset.id);
   if (action === 'delete-book') return deleteBook(button.dataset.id);
   if (action === 'clear-filters') return clearFilters();
+  if (action === 'quick-filter') return applyQuickFilter(button.dataset.filter, button.dataset.value);
+  if (action === 'open-category-manager') return openCategoryManager();
   if (action === 'add-mode') return setAddMode(button.dataset.mode);
   if (action === 'start-scanner') return startScanner();
   if (action === 'stop-scanner') return stopScanner(true);
   if (action === 'find-ocr-candidates') return findOcrCandidates();
   if (action === 'review-candidate') return reviewCandidate(Number(button.dataset.index));
+  if (action === 'review-title-result') return reviewTitleResult(Number(button.dataset.index));
+  if (action === 'skip-ocr-candidate') return skipOcrCandidate(Number(button.dataset.index));
+  if (action === 'donkey-wisdom') return showDonkeyWisdom();
+  if (action === 'use-recent-subcategory') return useRecentSubcategory(button.dataset.category, button.dataset.subcategory);
   if (action === 'drive-connect') return connectGoogleDrive();
   if (action === 'drive-save') return saveBackupToGoogleDrive();
   if (action === 'drive-restore') return prepareRestoreFromGoogleDrive();
@@ -704,14 +1062,26 @@ async function handleClick(event) {
   if (action === 'drive-restore-cancel') return cancelGoogleDriveRestore();
   if (action === 'drive-review-newer') return reviewNewerGoogleDriveBackup();
   if (action === 'drive-dismiss-newer') return dismissNewerGoogleDriveBackup();
-  if (action === 'export-json') return downloadText('janes-library-backup.json', exportLibraryJson(state.books), 'application/json');
+  if (action === 'export-json') return downloadText('janes-library-backup.json', exportLibraryJson(state.books, { categorySettings: state.categorySettings }), 'application/json');
   if (action === 'export-csv') return downloadText('janes-library-books.csv', booksToCsv(state.books), 'text/csv');
   if (action === 'clear-library') return clearLibrary();
+  if (action === 'restore-default-categories') return restoreDefaultCategorySettings();
+  if (action === 'reset-category-settings') return resetAllCategorySettings();
+}
+
+function openCategoryManager() {
+  pushHistory();
+  state.categoryManagerOpen = true;
+  state.view = 'backup';
+  clearMessage();
+  render();
 }
 
 function setView(view) {
   if (view !== 'add' || state.addMode !== 'barcode') stopScanner(false);
+  pushHistory();
   if (view === 'add') state.addMode = 'choices';
+  if (view !== 'backup') state.categoryManagerOpen = false;
   state.view = view;
   clearMessage();
   render();
@@ -720,12 +1090,15 @@ function setView(view) {
 function setAddMode(mode) {
   if (state.addMode === 'barcode' && mode !== 'barcode') stopScanner(false);
   state.addMode = mode || 'manual';
+  if (state.addMode === 'barcode') state.scannerError = '';
+  if (state.addMode !== 'title') state.titleSearch = { query: '', results: [] };
   state.view = 'add';
   clearMessage();
   render();
 }
 
 function openBook(id) {
+  pushHistory();
   state.selectedId = id;
   state.view = 'detail';
   clearMessage();
@@ -733,10 +1106,92 @@ function openBook(id) {
 }
 
 function editBook(id) {
+  pushHistory();
   state.editingId = id;
   state.view = 'edit';
   clearMessage();
   render();
+}
+
+function openBorrowing(id = '') {
+  pushHistory();
+  state.borrowSelectedId = id;
+  state.borrowMotion = '';
+  state.view = 'borrow';
+  clearMessage();
+  render();
+}
+
+function pushHistory() {
+  const snapshot = {
+    view: state.view,
+    selectedId: state.selectedId,
+    editingId: state.editingId,
+    borrowSelectedId: state.borrowSelectedId,
+    addMode: state.addMode
+  };
+  const last = state.history[state.history.length - 1];
+  if (snapshot.view === last?.view) return;
+  state.history.push(snapshot);
+  state.history = state.history.slice(-12);
+}
+
+function goBack() {
+  const previous = state.history.pop();
+  if (!previous) {
+    state.view = 'home';
+  } else {
+    state.view = previous.view;
+    state.selectedId = previous.selectedId;
+    state.editingId = previous.editingId;
+    state.borrowSelectedId = previous.borrowSelectedId;
+    state.addMode = previous.addMode;
+  }
+  clearMessage();
+  render();
+}
+
+async function checkOutBook(form) {
+  try {
+    const data = Object.fromEntries(new FormData(form).entries());
+    if (!data.bookId) throw new Error('Choose a book to check out.');
+    const existing = await store.getBook(data.bookId);
+    const notes = data.notes ? [existing?.notes, `Borrowing note: ${data.notes}`].filter(Boolean).join('\n') : existing?.notes;
+    const saved = await store.updateBook(data.bookId, {
+      status: 'Borrowed',
+      borrowedBy: data.borrowedBy,
+      borrowedDate: data.borrowedDate,
+      returnedDate: data.returnedDate,
+      notes
+    });
+    state.borrowSelectedId = saved.id;
+    state.borrowMotion = 'out';
+    setMessage(`${saved.title} checked out to ${saved.borrowedBy}.`, 'good');
+    await refreshBooks();
+    state.view = 'borrow';
+  } catch (error) {
+    setMessage(error.message || 'That book could not be checked out.', 'bad');
+    render();
+  }
+}
+
+async function checkInBook(id) {
+  try {
+    const saved = await store.updateBook(id, {
+      status: 'Available',
+      borrowedBy: '',
+      borrowedDate: '',
+      returnedDate: new Date().toISOString().slice(0, 10)
+    });
+    state.borrowSelectedId = saved.id;
+    state.borrowMotion = 'in';
+    setMessage(`${saved.title} checked back in.`, 'good');
+    await refreshBooks();
+    state.view = 'borrow';
+  } catch (error) {
+    setMessage(error.message || 'That book could not be checked in.', 'bad');
+    render();
+  }
 }
 
 async function deleteBook(id) {
@@ -753,16 +1208,32 @@ function applyFilters(form) {
   state.filters = {
     query: data.query || '',
     category: data.category || '',
+    subcategory: data.subcategory || '',
     author: data.author || '',
     shelf: data.shelf || '',
     status: data.status || '',
-    rating: data.rating || ''
+    rating: data.rating || '',
+    recent: data.recent || ''
   };
   render();
 }
 
 function clearFilters() {
-  state.filters = { query: '', category: '', author: '', shelf: '', status: '', rating: '' };
+  state.filters = { query: '', category: '', subcategory: '', author: '', shelf: '', status: '', rating: '', recent: '' };
+  render();
+}
+
+function applyQuickFilter(filter, value) {
+  const wasActive = state.filters[filter] === value;
+  state.filters = { ...state.filters, recent: filter === 'recent' ? state.filters.recent : '' };
+  if (filter === 'category') {
+    state.filters.category = wasActive ? '' : value;
+    state.filters.subcategory = '';
+  } else if (filter === 'status') {
+    state.filters.status = wasActive ? '' : value;
+  } else if (filter === 'recent') {
+    state.filters.recent = wasActive ? '' : value;
+  }
   render();
 }
 
@@ -772,17 +1243,20 @@ async function saveBookForm(form) {
     const payload = await formToBook(form);
     if (mode === 'edit') {
       const saved = await store.updateBook(form.dataset.id, payload);
+      rememberBookCategory(saved);
       setMessage('Book details saved.', 'good');
       state.selectedId = saved.id;
       state.view = 'detail';
     } else {
       const saved = await store.createBook(payload);
+      rememberBookCategory(saved);
       setMessage("Book saved to Jane's Library.", 'good');
       state.selectedId = saved.id;
       state.view = 'detail';
     }
     state.lookupBook = null;
     state.candidateBook = null;
+    state.titleSearch = { query: '', results: [] };
     await refreshBooks();
   } catch (error) {
     setMessage(error.message, 'bad');
@@ -814,7 +1288,7 @@ async function runIsbnLookup(form) {
 }
 
 async function lookupAndReview(isbn) {
-  setMessage('Looking for that ISBN...', 'good loading');
+  setMessage('Looking for that barcode...', 'good loading');
   render();
   state.lookupBook = await lookupBookByIsbn(isbn);
   state.view = 'lookupReview';
@@ -822,9 +1296,46 @@ async function lookupAndReview(isbn) {
   render();
 }
 
+async function runTitleSearch(form) {
+  try {
+    const query = String(new FormData(form).get('query') || '').trim();
+    if (!query) throw new Error('Type a title or author first.');
+    state.titleSearch = { query, results: [] };
+    setMessage('Searching free book catalogues...', 'good loading');
+    render();
+    const results = await searchBooksByText(query);
+    state.titleSearch = { query, results: results.slice(0, 8) };
+    setMessage(
+      results.length ? 'Possible books found. Review the right one before saving.' : 'No matching books were found. Jane can add the book manually instead.',
+      results.length ? 'good' : 'bad'
+    );
+    render();
+  } catch (error) {
+    setMessage(`${error.message} Jane can add the book manually instead.`, 'bad');
+    state.addMode = 'title';
+    state.view = 'add';
+    render();
+  }
+}
+
+function reviewTitleResult(index) {
+  state.candidateBook = state.titleSearch.results[index];
+  if (!state.candidateBook) {
+    setMessage('That search result is no longer available. Try the search again.', 'bad');
+    render();
+    return;
+  }
+  state.view = 'candidateReview';
+  clearMessage();
+  render();
+}
+
 async function startScanner() {
   try {
     clearMessage();
+    state.scannerError = '';
+    state.scannerActive = true;
+    render();
     const video = document.getElementById('barcode-video');
     if (!video) return;
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('This browser cannot open the camera here.');
@@ -840,13 +1351,15 @@ async function startScanner() {
         state.scannerControls = null;
         handleDetectedIsbn(result.getText ? result.getText() : String(result.text || result.rawValue || ''));
       });
-      setScannerStatus('Camera is open. Hold the barcode inside the picture.', 'good');
+      setScannerStatus('Camera is open — hold barcode still', 'good');
     } catch {
       await startNativeBarcodeFallback(video);
     }
   } catch (error) {
-    setMessage(`${error.message} Please type the ISBN instead.`, 'bad');
-    state.addMode = 'isbn';
+    stopScanner(false);
+    state.scannerError = error.message || 'The camera could not open.';
+    setMessage(`${state.scannerError} Try the camera again or add by barcode number.`, 'bad');
+    state.addMode = 'barcode';
     state.view = 'add';
     render();
   }
@@ -872,11 +1385,12 @@ async function startNativeBarcodeFallback(video) {
     setTimeout(tick, 350);
   };
   tick();
-  setScannerStatus('Camera is open. Hold the barcode inside the picture.', 'good');
+  setScannerStatus('Camera is open — hold barcode still', 'good');
 }
 
 function stopScanner(showStoppedMessage) {
   state.scannerLoop = 0;
+  state.scannerActive = false;
   if (state.scannerControls) {
     state.scannerControls.stop();
     state.scannerControls = null;
@@ -886,7 +1400,7 @@ function stopScanner(showStoppedMessage) {
     state.scannerStream = null;
   }
   if (showStoppedMessage) {
-    setMessage('Camera stopped.', 'good');
+    setMessage('Scan cancelled.', 'good');
     render();
   }
 }
@@ -918,9 +1432,15 @@ async function runOcr(form) {
         }
       }
     });
-    state.ocr.text = result.data.text || '';
+    const analysis = analyseOcrText(result.data.text || '');
+    state.ocr.text = analysis.cleanText || result.data.text || '';
     state.ocr.progress = 100;
-    setMessage('Shelf text found. Check it, edit it if needed, then find possible books.', 'good');
+    state.ocr.candidates = [];
+    if (!analysis.hasUsefulText) {
+      setMessage("I couldn't read enough from this shelf photo. Try a closer, brighter photo or add the books manually.", 'bad');
+    } else {
+      setMessage('Shelf text found. Jane can find possible books now, or review the detected text first.', 'good');
+    }
     render();
   } catch (error) {
     setMessage(`${error.message} You can still type visible titles by hand.`, 'bad');
@@ -932,23 +1452,34 @@ async function findOcrCandidates() {
   try {
     const textarea = document.querySelector('[name="ocrText"]');
     state.ocr.text = textarea ? textarea.value : state.ocr.text;
-    const queries = extractCandidateQueries(state.ocr.text);
-    if (!queries.length) throw new Error('There is not enough readable text yet.');
-    state.ocr.candidates = queries.map((query) => ({
+    const analysis = analyseOcrText(state.ocr.text);
+    state.ocr.text = analysis.cleanText;
+    if (!analysis.hasUsefulText) throw new Error("I couldn't read enough from this shelf photo. Try a closer, brighter photo or add the books manually.");
+    const detectedCandidates = analysis.queries.map((query) => ({
       title: query,
       authors: [],
-      source: 'Shelf photo text',
-      notes: 'OCR text candidate. Please review before saving.'
+      source: 'Detected from shelf photo',
+      notes: 'Detected from shelf photo text. Please review before saving.',
+      matchScore: 1,
+      matchConfidence: 'Needs review',
+      matchReason: `Detected from the shelf photo: "${query}".`
     }));
+    state.ocr.candidates = detectedCandidates;
     setMessage('Shelf text candidates are ready. Looking for better matches from free book catalogues...', 'good loading');
     render();
     const found = [];
-    for (const query of queries.slice(0, 4)) {
+    for (const query of analysis.queries.slice(0, 6)) {
       const matches = await searchBooksByText(query).catch(() => []);
       if (matches.length) found.push(...matches.map((book) => ({ ...book, source: `${book.source || 'Book lookup'} from shelf text` })));
     }
-    state.ocr.candidates = uniqueCandidates([...found, ...state.ocr.candidates]);
-    setMessage('Possible matches are ready for review. Only save the ones that look right.', 'good');
+    const filtered = filterShelfMatchesByOcr(analysis.cleanText, found);
+    state.ocr.candidates = uniqueCandidates([...filtered, ...detectedCandidates]);
+    setMessage(
+      filtered.length
+        ? 'Possible shelf matches are ready for review. Only save the ones that look right.'
+        : 'No confident catalogue matches were found. Jane can review the detected shelf text or add the books manually.',
+      filtered.length ? 'good' : 'bad'
+    );
     render();
   } catch (error) {
     setMessage(`${error.message} You can add the book manually instead.`, 'bad');
@@ -961,6 +1492,86 @@ function reviewCandidate(index) {
   state.view = 'candidateReview';
   clearMessage();
   render();
+}
+
+function skipOcrCandidate(index) {
+  state.ocr.candidates.splice(index, 1);
+  setMessage('Shelf suggestion skipped. Nothing was saved.', 'good');
+  render();
+}
+
+function useRecentSubcategory(category, subcategory) {
+  const form = document.querySelector('form[data-form="book"]');
+  if (!form) return;
+  const categoryInput = form.elements.category;
+  const subcategoryInput = form.elements.subcategory;
+  if (categoryInput) {
+    categoryInput.value = category;
+    updateSubcategoryDatalist(categoryInput);
+  }
+  if (subcategoryInput) subcategoryInput.value = subcategory;
+}
+
+function updateSubcategoryDatalist(categoryInput) {
+  const listId = categoryInput.dataset.subcategoryList;
+  if (!listId) return;
+  const datalist = document.getElementById(listId);
+  const subcategoryInput = categoryInput.form?.elements?.subcategory;
+  if (!datalist) return;
+  const options = getSubcategoryOptions(state.categorySettings, categoryInput.value);
+  datalist.innerHTML = options.map((item) => `<option value="${escapeAttr(item)}"></option>`).join('');
+  if (categoryInput.value === 'Uncategorised' && subcategoryInput) subcategoryInput.value = 'To Review';
+}
+
+function rememberBookCategory(book) {
+  state.categorySettings = recordRecentSubcategory(state.categorySettings, book.category, book.subcategory);
+  saveCategorySettings();
+}
+
+function addCategoryFromForm(form) {
+  const data = Object.fromEntries(new FormData(form).entries());
+  state.categorySettings = addCustomSubcategory(state.categorySettings, data.category, data.subcategory);
+  saveCategorySettings();
+  setMessage('Subcategory added.', 'good');
+  render();
+}
+
+function renameCategoryFromForm(form) {
+  const data = Object.fromEntries(new FormData(form).entries());
+  state.categorySettings = renameSubcategory(state.categorySettings, data.category, data.oldSubcategory, data.newSubcategory);
+  saveCategorySettings();
+  setMessage('Subcategory renamed. Existing books keep their saved text until Jane edits them.', 'good');
+  render();
+}
+
+function hideCategoryFromForm(form) {
+  const data = Object.fromEntries(new FormData(form).entries());
+  state.categorySettings = hideSubcategory(state.categorySettings, data.category, data.subcategory);
+  saveCategorySettings();
+  setMessage('Subcategory hidden from selectors. Existing books still display safely.', 'good');
+  render();
+}
+
+function restoreDefaultCategorySettings() {
+  state.categorySettings = restoreDefaultCategories(state.categorySettings);
+  saveCategorySettings();
+  setMessage('Default subcategories restored.', 'good');
+  render();
+}
+
+function resetAllCategorySettings() {
+  if (!confirm("Reset category settings to Jane's approved default list? Existing books will not be deleted.")) return;
+  state.categorySettings = resetCategorySettings();
+  saveCategorySettings();
+  setMessage('Categories reset to the approved default list.', 'good');
+  render();
+}
+
+function applyImportedCategorySettings(categorySettings, mode) {
+  state.categorySettings = mode === 'replace'
+    ? normalizeCategorySettings(categorySettings)
+    : mergeCategorySettings(state.categorySettings, categorySettings);
+  saveCategorySettings();
 }
 
 async function connectGoogleDrive() {
@@ -979,7 +1590,7 @@ async function saveBackupToGoogleDrive() {
   try {
     const token = await ensureGoogleDriveAccess();
     const backupTime = new Date();
-    const backupJson = createDriveBackupJson(state.books, { now: () => backupTime });
+    const backupJson = createDriveBackupJson(state.books, { now: () => backupTime, categorySettings: state.categorySettings });
     const client = createGoogleDriveBackupClient({ accessToken: token });
     setMessage('Saving the Google Drive backup...', 'good loading');
     render();
@@ -987,7 +1598,8 @@ async function saveBackupToGoogleDrive() {
     state.drive.lastBackupAt = backupTime.toISOString();
     writeLocalValue(DRIVE_LAST_BACKUP_KEY, state.drive.lastBackupAt);
     state.drive.newerBackup = null;
-    setMessage(`Google Drive backup saved at ${formatDateTime(state.drive.lastBackupAt)}.`, 'good');
+    state.donkeyMessage = randomFrom(DONKEY_BACKUP_MESSAGES);
+    setMessage(`Backup saved. ${state.donkeyMessage}`, 'good');
     render();
   } catch (error) {
     setMessage(error.message || 'Google Drive backup could not be saved. Local data is safe; JSON export still works.', 'bad');
@@ -1021,9 +1633,12 @@ async function applyGoogleDriveRestore(mode) {
     } else {
       await store.mergeBooks(preview.data.books);
     }
+    applyImportedCategorySettings(preview.data.categorySettings, mode);
     const count = preview.data.books.length;
     state.drive.restorePreview = null;
     state.drive.newerBackup = null;
+    state.drive.lastRestoreAt = new Date().toISOString();
+    writeLocalValue(DRIVE_LAST_RESTORE_KEY, state.drive.lastRestoreAt);
     state.view = 'browse';
     setMessage(`${count} book(s) restored from Google Drive by ${mode === 'replace' ? 'replacing this browser library' : 'merging with this browser library'}.`, 'good');
     await refreshBooks();
@@ -1050,6 +1665,12 @@ function reviewNewerGoogleDriveBackup() {
 function dismissNewerGoogleDriveBackup() {
   state.drive.newerBackup = null;
   setMessage('Google Drive restore skipped. Local library was not changed.', 'good');
+  render();
+}
+
+function showDonkeyWisdom() {
+  state.donkeyMessage = randomFrom(DONKEY_HELPER_MESSAGES);
+  setMessage(state.donkeyMessage, 'good');
   render();
 }
 
@@ -1148,6 +1769,7 @@ async function importBackup(form) {
     } else {
       await store.mergeBooks(backup.books);
     }
+    applyImportedCategorySettings(backup.categorySettings, mode);
     setMessage(`${backup.books.length} book(s) imported.`, 'good');
     state.view = 'browse';
     await refreshBooks();
@@ -1191,6 +1813,58 @@ function field(name, label, value = '', type = 'text', placeholder = '', require
     <label>${escapeHtml(label)}
       <input name="${escapeAttr(name)}" type="${escapeAttr(type)}" value="${escapeAttr(value || '')}" placeholder="${escapeAttr(placeholder)}" ${required ? 'required' : ''}>
     </label>
+  `;
+}
+
+function fieldWithList(name, label, value, listId, options, placeholder = '', required = false) {
+  return `
+    <label>${escapeHtml(label)}
+      <input name="${escapeAttr(name)}" list="${escapeAttr(listId)}" value="${escapeAttr(value || '')}" placeholder="${escapeAttr(placeholder)}" ${required ? 'required' : ''}>
+      <datalist id="${escapeAttr(listId)}">
+        ${options.map((option) => `<option value="${escapeAttr(option)}"></option>`).join('')}
+      </datalist>
+    </label>
+  `;
+}
+
+function categoryFieldsHtml(book, mode) {
+  const main = MAIN_CATEGORIES.includes(book.category) ? book.category : 'Uncategorised';
+  const subcategory = book.subcategory || (main === 'Uncategorised' ? 'To Review' : '');
+  const listId = `subcategory-options-${escapeAttr(mode)}`;
+  const options = getSubcategoryOptions(state.categorySettings, main);
+  const legacyNote = book.category && !MAIN_CATEGORIES.includes(book.category)
+    ? `<p class="legacy-category-note wide">${escapeHtml(safeCategoryDisplay(book))} is an older saved category. Choose Fiction, Non-Fiction or Uncategorised when Jane is ready to tidy it.</p>`
+    : '';
+  return `
+    <div class="category-fields wide">
+      <label>Main category
+        <select name="category" data-subcategory-list="${listId}">
+          ${MAIN_CATEGORIES.map((item) => `<option value="${escapeAttr(item)}" ${item === main ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}
+        </select>
+      </label>
+      <label>Subcategory
+        <input name="subcategory" list="${listId}" value="${escapeAttr(subcategory)}" placeholder="${main === 'Uncategorised' ? 'To Review' : 'Start typing a subcategory'}">
+        <datalist id="${listId}">
+          ${options.map((item) => `<option value="${escapeAttr(item)}"></option>`).join('')}
+        </datalist>
+      </label>
+      ${recentSubcategoryChipsHtml()}
+      ${legacyNote}
+    </div>
+  `;
+}
+
+function recentSubcategoryChipsHtml() {
+  if (!state.categorySettings.recentSubcategories.length) return '';
+  return `
+    <div class="recent-category-chips wide" aria-label="Recently used categories">
+      <span>Recently used</span>
+      ${state.categorySettings.recentSubcategories.map((item) => `
+        <button class="light" type="button" data-action="use-recent-subcategory" data-category="${escapeAttr(item.category)}" data-subcategory="${escapeAttr(item.subcategory)}">
+          ${escapeHtml(item.category)} / ${escapeHtml(item.subcategory)}
+        </button>
+      `).join('')}
+    </div>
   `;
 }
 
@@ -1333,6 +2007,27 @@ function writeLocalValue(key, value) {
   } catch {}
 }
 
+function loadCategorySettings() {
+  try {
+    return normalizeCategorySettings(JSON.parse(localStorage.getItem(CATEGORY_SETTINGS_KEY) || '{}'));
+  } catch {
+    return normalizeCategorySettings();
+  }
+}
+
+function saveCategorySettings() {
+  try {
+    localStorage.setItem(CATEGORY_SETTINGS_KEY, JSON.stringify(normalizeCategorySettings(state.categorySettings)));
+  } catch {}
+}
+
+function allVisibleSubcategories() {
+  return [
+    ...getSubcategoryOptions(state.categorySettings, 'Fiction'),
+    ...getSubcategoryOptions(state.categorySettings, 'Non-Fiction')
+  ];
+}
+
 function formatDate(value) {
   const time = Date.parse(value || '');
   if (!Number.isFinite(time)) return '';
@@ -1373,6 +2068,10 @@ function setMessage(text, type = '') {
 
 function clearMessage() {
   state.message = null;
+}
+
+function randomFrom(items) {
+  return items[Math.floor(Math.random() * items.length)];
 }
 
 function setScannerStatus(text, type) {

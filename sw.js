@@ -1,4 +1,4 @@
-const CACHE_NAME = 'janes-library-v2';
+const CACHE_NAME = 'janes-library-v4';
 const APP_SHELL = [
   './',
   './index.html',
@@ -10,9 +10,19 @@ const APP_SHELL = [
   './src/backup.js',
   './src/googleDriveBackup.js',
   './src/config/googleDriveConfig.js',
+  './src/categories.js',
   './src/ocrCandidates.js',
   './manifest.webmanifest',
-  './assets/icon.svg'
+  './assets/icon-192.png',
+  './assets/icon-512.png',
+  './assets/icon.svg',
+  './assets/ui/home-library.jpg',
+  './assets/ui/shelves-library-optimized.jpg',
+  './assets/ui/book-spines-optimized.jpg',
+  './assets/ui/settings-library.jpg',
+  './assets/ui/book-open.svg',
+  './assets/ui/reading-lady.svg',
+  './assets/ui/library-donkey.svg'
 ];
 
 self.addEventListener('install', (event) => {

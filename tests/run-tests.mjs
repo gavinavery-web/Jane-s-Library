@@ -4,6 +4,9 @@ import './filters.test.mjs';
 import './backup.test.mjs';
 import './googleDriveBackup.test.mjs';
 import './ocrCandidates.test.mjs';
+import './categories.test.mjs';
+import './uiText.test.mjs';
+import './pwa.test.mjs';
 import { run } from './testHarness.mjs';
 
 await run();

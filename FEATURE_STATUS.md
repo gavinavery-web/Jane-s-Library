@@ -4,30 +4,35 @@
 
 - Static browser PWA foundation.
 - Static build output in `dist/`.
-- PWA manifest and service worker.
+- PWA manifest, service worker and iPhone home-screen icons.
 - IndexedDB local storage: Working.
 - Manual add, edit and delete.
 - Home dashboard with large action cards, recently added books and mobile bottom navigation.
 - Visual book card grid with fallback covers.
 - Book detail view.
 - Personal star rating field, display and 5/4+/3+/unrated filters.
-- Text search across title, subtitle, authors, ISBN, publisher, summary and notes.
-- Category, author, shelf and status filters.
+- Text search across title, subtitle, authors, barcode, publisher, summary and notes.
+- Structured Fiction / Non-Fiction / Uncategorised category system with dependent subcategory autocomplete.
+- Manage Categories settings for custom, renamed, hidden and restored subcategories.
+- Category, subcategory, author, shelf and status filters.
 - Reset filters action.
+- Check In / Check Out borrowing workflow with borrowed-book list and book-detail access.
+- In-app Back button for phone navigation.
 - Local cover image upload using data URLs.
 - Cover image URL field.
 - JSON export/import: Working.
 - Google Drive backup: Implemented and configured with the browser OAuth Client ID; mocked smoke test passes.
 - Google Drive restore: Implemented and configured with the browser OAuth Client ID; mocked smoke test passes.
-- CSV export.
-- ISBN cleaning and validation.
+- CSV book-list export with total quantity and numbered rows.
+- Barcode cleaning and validation.
 - Google Books lookup with review before save.
 - Open Library fallback when Google Books fails, rate-limits or finds nothing.
-- Plain-English no-result and network-failure ISBN messages with manual-entry fallback.
+- Plain-English no-result and network-failure barcode messages with manual-entry fallback.
 - Shelf photo/text review workflow.
 - OCR extracted text review/edit area.
 - OCR candidate generation from corrected text.
 - Review-before-save flow for OCR/book candidates.
+- Cover fallback if a lookup source or cover URL does not provide a usable image.
 
 ## Working With Limitations
 

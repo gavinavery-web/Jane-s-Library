@@ -169,12 +169,13 @@ try {
   const goScan = async () => page.getByRole('button', { name: 'Scan', exact: true }).click();
   const goSettings = async () => page.getByRole('button', { name: 'Settings', exact: true }).click();
 
-  await page.getByRole('button', { name: /Add a Book/ }).first().click();
+  await page.locator('button.action-card[data-view="add"]').click();
   await page.getByRole('button', { name: /Add Manually/ }).click();
   await page.fill('input[name="title"]', 'Safari');
   await page.fill('input[name="authors"]', 'Jane Avery');
   await page.locator('summary').filter({ hasText: 'More details' }).click();
-  await page.fill('input[name="category"]', 'Travel');
+  await page.locator('form[data-form="book"] select[name="category"]').selectOption('Non-Fiction');
+  await page.fill('form[data-form="book"] input[name="subcategory"]', 'Travel');
   await page.fill('input[name="shelfLocation"]', 'Window Wall / Table');
   await page.fill('textarea[name="summary"]', 'A coffee table book from the sitting room.');
   await chooseRating(5);
@@ -212,7 +213,8 @@ try {
   await page.getByLabel(/Search Jane/).fill('edited note');
   await page.getByRole('button', { name: /Search/ }).click();
   await openFilters();
-  await page.locator('select[name="category"]').selectOption('Travel');
+  await page.locator('select[name="category"]').selectOption('Non-Fiction');
+  await page.locator('select[name="subcategory"]').selectOption('Travel');
   await page.locator('select[name="shelf"]').selectOption('Window Wall / Table');
   await page.locator('select[name="status"]').selectOption('Available');
   await page.locator('select[name="rating"]').selectOption('3up');
@@ -222,13 +224,12 @@ try {
 
   await goAdd();
   await page.getByRole('button', { name: /Scan Barcode/ }).click();
-  await page.getByRole('button', { name: /Open Camera/ }).click();
+  await page.getByRole('button', { name: /^Scan Barcode$/ }).click();
   await page.waitForTimeout(1000);
   const scannerText = await page.locator('body').innerText();
 
   if (!(await page.locator('input[name="isbn"]').count())) {
-    await goAdd();
-    await page.getByRole('button', { name: /Enter ISBN/ }).click();
+    await page.getByRole('button', { name: /Enter Barcode Manually|Add by Barcode Number/ }).first().click();
   }
   await page.fill('input[name="isbn"]', '9781761069819');
   await page.getByRole('button', { name: 'Find Book' }).click();
@@ -268,13 +269,15 @@ try {
   await page.getByRole('button', { name: /Read Shelf Photo/ }).click();
   await page.waitForTimeout(500);
   const ocrExtracted = await page.locator('textarea[name="ocrText"]').inputValue();
+  await page.locator('.ocr-text-review summary').click();
   await page.fill('textarea[name="ocrText"]', "SAFARI\nNobody's Girl\nVirginia Roberts");
   await page.getByRole('button', { name: /Find Possible Books/ }).click();
   await page.waitForTimeout(1500);
   const ocrText = await page.locator('.panel').innerText();
   await page.getByRole('button', { name: /Review & Save/ }).first().click();
   await page.fill('input[name="title"]', 'OCR Unrated Candidate');
-  await page.fill('input[name="category"]', 'Shelf OCR');
+  await page.locator('form[data-form="book"] select[name="category"]').selectOption('Non-Fiction');
+  await page.fill('form[data-form="book"] input[name="subcategory"]', 'Travel');
   await page.fill('input[name="shelfLocation"]', 'OCR Shelf');
   await page.fill('textarea[name="notes"]', 'Saved from shelf OCR review after manual correction.');
   await chooseRating(0);
@@ -307,10 +310,10 @@ try {
   await page.getByRole('button', { name: /Connect Google Drive/ }).click();
   await page.waitForFunction(() => document.body.innerText.includes('Google Drive connected'));
   const driveConnectedText = await page.locator('body').innerText();
-  await page.getByRole('button', { name: 'Save Backup', exact: true }).click();
-  await page.waitForFunction(() => document.body.innerText.includes('Google Drive backup saved'));
+  await page.getByRole('button', { name: 'Back Up Now', exact: true }).last().click();
+  await page.waitForFunction(() => document.body.innerText.includes('Backup saved'));
   const driveSavedText = await page.locator('body').innerText();
-  await page.getByRole('button', { name: 'Restore Backup', exact: true }).click();
+  await page.getByRole('button', { name: 'Restore from Drive', exact: true }).click();
   await page.waitForFunction(() => document.body.innerText.includes('Review Google Drive restore'));
   const driveRestorePreviewText = await page.locator('.panel').innerText();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -318,7 +321,7 @@ try {
   const driveDisconnectedText = await page.locator('body').innerText();
   const download = await Promise.all([
     page.waitForEvent('download', { timeout: 10000 }),
-    page.getByRole('button', { name: /Download emergency backup/ }).click()
+    page.getByRole('button', { name: /Download Backup File/ }).click()
   ]).then(([item]) => item);
   await download.saveAs(backupPath);
   const exportedBackup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
@@ -360,12 +363,12 @@ try {
     combinedRatingFilterWorks: combinedRatingFiltered.includes('Safari') && combinedRatingFiltered.includes('3 stars'),
     driveDisconnectedUiVisible: backupScreenWithDrive.includes('Google Drive status') && backupScreenWithDrive.includes('Not connected'),
     driveConnectMocked: driveConnectedText.includes('Google Drive connected'),
-    driveSaveMocked: driveSavedText.includes('Google Drive backup saved') && driveBackupJson.includes('"rating"'),
+    driveSaveMocked: driveSavedText.includes('Backup saved') && driveBackupJson.includes('"rating"'),
     driveRestorePreviewMocked: driveRestorePreviewText.includes('Review Google Drive restore') && driveRestorePreviewText.includes('Books in Drive backup'),
     driveDisconnectSafe: driveDisconnectedText.includes('Google Drive disconnected'),
     backupExported: exportHasRatings,
     backupImported: afterImport.includes('Safari') && afterImport.includes('3 stars') && afterImport.includes('Flawed Hero') && afterImport.includes('4 stars'),
-    scannerFallbackVisible: /type the ISBN|camera|Camera|scanner/i.test(scannerText),
+    scannerFallbackVisible: /barcode|camera|Camera|scanner/i.test(scannerText),
     ocrUploadExtractedText: /SAFARI|Nobody/i.test(ocrExtracted),
     ocrCandidateVisible: /Possible books|Review & Save|SAFARI|Nobody/i.test(ocrText),
     ocrCandidateSavedUnrated: ocrSavedDetail.includes('OCR Unrated Candidate') && ocrSavedDetail.includes('Not rated'),

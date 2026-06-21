@@ -1,6 +1,7 @@
 export function filterBooks(books, filters = {}) {
   const query = normalize(filters.query);
   const category = normalize(filters.category);
+  const subcategory = normalize(filters.subcategory);
   const author = normalize(filters.author);
   const shelf = normalize(filters.shelf);
   const status = normalize(filters.status);
@@ -13,12 +14,17 @@ export function filterBooks(books, filters = {}) {
       (book.authors || []).join(' '),
       book.isbn10,
       book.isbn13,
+      book.category,
+      book.subcategory,
+      book.shelfLocation,
+      book.status,
       book.summary,
       book.notes,
       book.publisher
     ].join(' '));
     return (!query || searchable.includes(query))
       && (!category || normalize(book.category) === category)
+      && (!subcategory || normalize(book.subcategory) === subcategory)
       && (!author || normalize((book.authors || []).join(' ')).includes(author))
       && (!shelf || normalize(book.shelfLocation).includes(shelf))
       && (!status || normalize(book.status) === status)
@@ -29,6 +35,7 @@ export function filterBooks(books, filters = {}) {
 export function deriveFilterOptions(books) {
   return {
     categories: uniqueSorted(books.map((book) => book.category)),
+    subcategories: uniqueSorted(books.map((book) => book.subcategory)),
     authors: uniqueSorted(books.flatMap((book) => book.authors || [])),
     shelves: uniqueSorted(books.map((book) => book.shelfLocation)),
     statuses: uniqueSorted(books.map((book) => book.status || 'Available'))
